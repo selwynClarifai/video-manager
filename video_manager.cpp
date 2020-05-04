@@ -393,6 +393,8 @@ static int decode_video(char *videoSource, int frameInterval, bool saveVideo, bo
         //av_packet_rescale_ts(pPacket, pCodecContext->time_base, inStream->time_base);
         //pPacket->stream_index = inStream->index;
 
+        // set pPacket->stream_index to 0 because pOutFormatContext contains only one stream - for video.
+        pPacket->stream_index = 0;
         int stat = av_interleaved_write_frame(pOutFormatContext, pPacket);
         //int stat = av_write_frame(pOutFormatContext, pPacket);
       }
