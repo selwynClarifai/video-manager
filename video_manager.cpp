@@ -114,6 +114,7 @@ static int open_video_out_file_and_stream(AVFormatContext *pOutFormatContext, AV
   AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, const string &outFilename, int video_stream_index);
 static void close_video_out_file();
 static void get_jpg_files_in_output_dir(std::vector<string> &jpgFiles);
+static chrono::milliseconds millisecs_since_epoch();
 
 // Configuration file functions
 static bool write_json_config_file();
@@ -186,6 +187,7 @@ int main(int argc, char *argv[])
 
   int status = 0;
   if (upload) {
+    cout << "UPLOADING AND PREDICTING" << endl;
     run_upload_and_predict();
   } else {
     int status = decode_video(argv[optind], frames_to_skip, save_video_file, save_I_frames);
@@ -318,7 +320,9 @@ static int decode_video(char *videoSource, int frameInterval, bool saveVideo, bo
     * Use .ts for accurate frame rate.
     * https://stackoverflow.com/questions/44593241/ffmpeg-segmentation-and-inaccurate-wrong-framerate
     */
-    string outFilename = output_dir + "/out.ts";
+    chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
+    string outFilename = output_dir + "/video_" + 
+                std::to_string(chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count()) + ".ts";
     pOutFormatContext = avformat_alloc_context();
 
     int status = open_video_out_file_and_stream(pOutFormatContext, pInFormatContext, pCodecContext, 
@@ -383,15 +387,6 @@ static int decode_video(char *videoSource, int frameInterval, bool saveVideo, bo
 
       // Save to video output file
       if (saveVideo) {
-        //cout << "pPacket->stream_index = " << pPacket->stream_index << ", outStream->index = " << outStream->index << endl;
-        //cout << "outStream->stream_identifier = " << outStream->stream_identifier << endl;
-        //pPacket->stream_index = outStream->index;
-        //pPacket->pts = av_rescale_q(pPacket->pts, pInFormatContext->streams[0]->codec->time_base, pOutFormatContext->streams[0]->time_base);
-        //pPacket->dts = av_rescale_q(pPacket->dts, pInFormatContext->streams[0]->codec->time_base, pOutFormatContext->streams[0]->time_base);
-
-        /* rescale output packet timestamp values from codec to stream timebase */
-        //av_packet_rescale_ts(pPacket, pCodecContext->time_base, inStream->time_base);
-        //pPacket->stream_index = inStream->index;
 
         // set pPacket->stream_index to 0 because pOutFormatContext contains only one stream - for video.
         pPacket->stream_index = 0;
@@ -559,7 +554,9 @@ static int write_jpeg(string &imageFileName, AVFrame *pFrame, int frameNumber)
     }
 
     stringstream frame_filename;
-    frame_filename << output_dir + "/frame-" << frameNumber << ".jpg";
+    chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
+    frame_filename << output_dir + "/frame-" << 
+              chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count() << ".jpg";
     FILE *file = fopen(frame_filename.str().c_str(), "wb");
     if (!file) {
         //cerr << "Could not open JPEG file: " << strerror(errno);
@@ -918,10 +915,10 @@ static void run_upload_and_predict()
     string _imageID;
     bool uploadComplete = upload_image(_imageID, jpg);
     while (!uploadComplete) {
-        std::this_thread::sleep_for(wait_duration);
-        uploadComplete = verify_upload_complete(_imageID);
-        predict_on_image(jpg);
+      std::this_thread::sleep_for(wait_duration);
+      uploadComplete = verify_upload_complete(_imageID);
     }
+    predict_on_image(jpg);
   }
 
   auto endTime = chrono::steady_clock::now();
@@ -1436,7 +1433,6 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       if (code->valueint != 30000) {
         uploadComplete = false;
       }
-
     }   // inputs
 
   } catch (string &err) {
@@ -1671,7 +1667,7 @@ static bool found_config_file()
   struct dirent *epdf;
   bool found = false;
 
-  dpdf = opendir("..");
+  dpdf = opendir("/files");
   if (dpdf != NULL){
     while (epdf = readdir(dpdf)){
       if (strcmp(epdf->d_name, "config.json") == 0) {
@@ -1877,10 +1873,10 @@ static bool read_json_config_file()
     {
       if (cJSON_IsTrue(j_save_I_frames)) {
         save_I_frames = true;
-        cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
       } else {
         save_I_frames = false;
       }
+      cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
     } else {
       throw "Error: could not parse save_I_frames from config.json";
     }
@@ -1961,9 +1957,8 @@ static bool read_json_config_file()
 */
 static void write_metadata_from_config()
 {
-  // Get number of seconds from epoch
-  std::time_t epochSeconds = std::time(nullptr);
-  std::asctime(std::localtime(&epochSeconds));
+  // Get number of ms from epoch
+  chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
 
   // Insert epochTime before metadata_structure.
   size_t pos = metadata_structure.find("{");  // opening brace of the json object
@@ -1973,7 +1968,8 @@ static void write_metadata_from_config()
     // "{" found. Insert after it.
     pos += 1;
   }
-  metadata_structure.insert(pos, "\"time\": " + std::to_string(epochSeconds) + ", ");
+  metadata_structure.insert(pos, "\"time_ms_since_epoch\": " + 
+            std::to_string(chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count()) + ", ");
 
   // Convert metadata_structure string to JSON, and add timestamp.
   cJSON *metaJson = cJSON_Parse(metadata_structure.c_str());
@@ -1984,7 +1980,8 @@ static void write_metadata_from_config()
   char *metaJsonChars = cJSON_Print(metaJson);
 
   stringstream metadataFilename;
-  metadataFilename << output_dir << "/metadata_" << epochSeconds << ".json";
+  metadataFilename << output_dir << "/metadata_" << 
+            chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count() << ".json";
   FILE *fp = fopen(metadataFilename.str().c_str(), "w");
   fwrite(metaJsonChars, sizeof(char), strlen(metaJsonChars), fp);
   fclose(fp);
@@ -1993,3 +1990,10 @@ static void write_metadata_from_config()
   cJSON_Delete(metaJson);
   free(metaJsonChars);
 }
+
+  // Get number of ms from epoch
+  static chrono::milliseconds millisecs_since_epoch()
+  {
+    return chrono::duration_cast< chrono::milliseconds >(
+              chrono::system_clock::now().time_since_epoch());
+  }
