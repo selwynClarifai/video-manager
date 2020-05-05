@@ -73,9 +73,9 @@ bool save_I_frames = false;
 bool save_video_file = true;
 bool print_debug = false;
 bool upload = false;
-string metadata_structure = "{\n \
-      \"my interesting thing 1\": \"value\",\n \
-      \"key2\": \"value2\"\n \
+string metadata_structure = "{ \
+      \"my interesting thing 1\": \"value\", \
+      \"key2\": \"value2\" \
     }";
 
 string authorizationHeader;
@@ -614,24 +614,24 @@ static bool upload_image(string &imageID, const string &imageFileName)
       root = cJSON_CreateObject();
       if (!root) {
         fprintf(stderr, "Error: could not create root cJSON object\n");
-        throw "Error: could not create root cJSON object";
+        throw std::runtime_error("Error: could not create root cJSON object");
       }
 
       inputs = cJSON_CreateArray();
       if (!inputs) {
         //fprintf(stderr, "Error: could not create inputs cJSON object\n");
-        throw "Error: could not create inputs cJSON object";
+        throw std::runtime_error("Error: could not create inputs cJSON object");
       }
       cJSON_AddItemToObject(root, "inputs", inputs);
 
       if (!create_json_inputs(inputs, input, data, image, base64, imageFileName)) {
-        throw "Error: create_json_inputs failed.";
+        throw std::runtime_error("Error: create_json_inputs failed.");
       }
 
       inputsJson = cJSON_PrintUnformatted(root);
       if(!inputsJson) {
         //fprintf(stderr, "Error: cJSON_PrintUnformatted failed.\n");
-        throw "Error: cJSON_PrintUnformatted failed.";
+        throw std::runtime_error("Error: cJSON_PrintUnformatted failed.");
       }
 
       curl_easy_setopt(handle, CURLOPT_POSTFIELDS, inputsJson);
@@ -681,9 +681,9 @@ static bool upload_image(string &imageID, const string &imageFileName)
       }
       status = uploadComplete;
 
-    } catch (string &err) {
+  } catch(const std::exception& e) {
       if (printDebug) {
-        logging(err.c_str());
+        logging(e.what());
         status = false;
       }
     }
@@ -800,22 +800,22 @@ static int predict_on_image(const string &imageFileName)
       root = cJSON_CreateObject();
       if (!root) {
         fprintf(stderr, "Error: could not create root cJSON object\n");
-        throw "Error: could not create root cJSON object";
+        throw std::runtime_error("Error: could not create root cJSON object");
       }
 
       inputs = cJSON_CreateArray();
       if (!inputs) {
-        throw "Error: could not create inputs cJSON object";
+        throw std::runtime_error("Error: could not create inputs cJSON object");
       }
       cJSON_AddItemToObject(root, "inputs", inputs);
 
       if (!create_json_inputs(inputs, input, data, image, base64, imageFileName)) {
-        throw "Error: create_json_inputs failed.";
+        throw std::runtime_error("Error: create_json_inputs failed.");
       }
 
       inputsJson = cJSON_PrintUnformatted(root);
       if(!inputsJson) {
-        throw "Error: cJSON_PrintUnformatted failed.";
+        throw std::runtime_error("Error: cJSON_PrintUnformatted failed.");
       }
 
       curl_easy_setopt(handle, CURLOPT_POSTFIELDS, inputsJson);
@@ -834,7 +834,7 @@ static int predict_on_image(const string &imageFileName)
         curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_predict_response);
       } else {
         //fprintf(stderr, "Error: image file name %s does not have extension.\n", imageFileName);
-        throw "Error: image file name " + imageFileName  + " does not have extension.";
+        throw std::runtime_error("Error: image file name " + imageFileName  + " does not have extension.");
       }
   
       /* Perform the request, res will get the return code */ 
@@ -861,9 +861,9 @@ static int predict_on_image(const string &imageFileName)
         fwrite(responseParsed.c_str(), responseParsed.size(), 1, fp);
         fclose(fp);
       }
-    } catch (string &err) {
+  } catch(const std::exception& e) {
       if (printDebug) {
-        cerr << err <<  endl;
+        logging(e.what());
       }
     }
  
@@ -911,19 +911,29 @@ static void run_upload_and_predict()
 
   auto startTime = chrono::steady_clock::now();
 
+  int uploadCount = 0;
+  size_t totalJpgs = jpgFiles.size();
   for (auto const &jpg : jpgFiles) {
     string _imageID;
+    // the image upload is asynchronous
     bool uploadComplete = upload_image(_imageID, jpg);
+
+    // while image is uploading, simultaneously predict
+    predict_on_image(jpg);
+
+    // finally, if image has not yet uploaded, keep verifying its upload until complete
     while (!uploadComplete) {
       std::this_thread::sleep_for(wait_duration);
       uploadComplete = verify_upload_complete(_imageID);
     }
-    predict_on_image(jpg);
+    uploadCount++;
+    if (uploadCount % 100 == 0) {
+      logging("Uploaded and predicted on %d of %d images.", uploadCount, totalJpgs);
+    }
   }
 
   auto endTime = chrono::steady_clock::now();
-
-
+  logging("Uploaded and predicted on %d of %d images.", uploadCount, totalJpgs);
   logging("Uploaded and predicted on %d images in %d seconds.", 
                     jpgFiles.size(), chrono::duration_cast<chrono::seconds>(endTime-startTime).count());
 }
@@ -972,7 +982,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
         {
             errString = "Error before: ";
             errString.append(error_ptr);
-            throw errString;
+            throw std::runtime_error(errString);
         }
     }
 
@@ -984,13 +994,13 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
         errString = "Error: Predict response failed: ";
         errString.append(description->valuestring);
         errString.append(". Response Code = " + std::to_string(code->valueint));
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
         errString = "Error: parse_json_predict_response: Predict response failed. Response description = ";
         errString.append(description->valuestring);
-        throw errString;
+        throw std::runtime_error(errString);
       }
     }
 
@@ -1001,7 +1011,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
     cJSON * output = NULL;
     if (!outputs) {
       errString = "Error: parse_json_predict_response: Predict response failed. No outputs found.";
-      throw errString;
+      throw std::runtime_error(errString);
     }
     
     /*
@@ -1012,20 +1022,20 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
       status = cJSON_GetObjectItemCaseSensitive(output, "status");
       if (!status) {
         errString = "Error: parse_json_predict_response: Predict outputs status not found";
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       cJSON *code = cJSON_GetObjectItemCaseSensitive(status, "code");
       cJSON *description = cJSON_GetObjectItemCaseSensitive(status, "description");
       if (!cJSON_IsNumber(code) || code->valueint != 10000) {
         errString = "Error: parse_json_predict_response: Predict outputs response failed. Outputs response Code = " + std::to_string(code->valueint);
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
         errString = "Error: parse_json_predict_response: Predict outputs response failed. Outputs response description = ";
         errString.append(description->valuestring);
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       /*
@@ -1035,7 +1045,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
       outputs_data = cJSON_GetObjectItemCaseSensitive(output, "data");
       if (!outputs_data) {
         errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data found.";
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       /*
@@ -1045,7 +1055,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
       regions = cJSON_GetObjectItemCaseSensitive(outputs_data, "regions");
       if (!regions) {
         errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions found.";
-        throw errString;
+        throw std::runtime_error(errString);
       } 
 
       stringstream ssRegion;
@@ -1057,7 +1067,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
         bbox = cJSON_GetObjectItemCaseSensitive(region_info, "bounding_box");
         if (!cJSON_IsString(id)) {
           errString = "Error: parse_json_predict_response: Predict outputs response failed. No outputs->data->regions->bounding_box.";
-          throw errString;
+          throw std::runtime_error(errString);
         }
         ssRegion << id->valuestring;
         if (bbox) {
@@ -1068,7 +1078,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
           if ( !cJSON_IsNumber(top_row) || !cJSON_IsNumber(left_col) ||
               !cJSON_IsNumber(bottom_row) || !cJSON_IsNumber(right_col) ) {
             errString = "Error: parse_json_predict_response: Predict regions response failed. Could not parse bounding box";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           ssRegion << sepString << top_row->valuedouble << sepString << left_col->valuedouble;
@@ -1082,7 +1092,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
         regions_data = cJSON_GetObjectItemCaseSensitive(region, "data");
         if (!regions_data) {
           errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions->data found.";
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         /*
@@ -1092,7 +1102,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
         concepts = cJSON_GetObjectItemCaseSensitive(regions_data, "concepts");
         if (!concepts) {
           errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions->data->concepts found.";
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         cJSON *concept = NULL;
@@ -1101,7 +1111,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
           id = cJSON_GetObjectItemCaseSensitive(concept, "id");
           if (!cJSON_IsString(id)) {
             errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions->data->concepts->id found.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           ssRegion << sepString << id->valuestring;
@@ -1110,7 +1120,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
           name = cJSON_GetObjectItemCaseSensitive(concept, "name");
           if (!cJSON_IsString(name)) {
             errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions->data->concepts->name found.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           ssRegion << sepString << name->valuestring;
@@ -1119,7 +1129,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
           value = cJSON_GetObjectItemCaseSensitive(concept, "value");
           if (!cJSON_IsNumber(value)) {
             errString = "Error: parse_json_predict_response: Predict response failed. No outputs->data->regions->data->concepts->value found.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           ssRegion << sepString << value->valuedouble;
@@ -1134,9 +1144,9 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
       }   // regions
     }   // outputs
 
-  } catch (string &err) {
-    logging(err.c_str());
-    responseParsed.append(err);
+  } catch(const std::exception& e) {
+    logging(e.what());
+    responseParsed.append(e.what());
     responseParsed.append("\n");
     parseStatus = false;
   }
@@ -1167,7 +1177,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
         {
             errString = "Error before: ";
             errString.append(error_ptr);
-            throw errString;
+            throw std::runtime_error(errString);
         }
     }
 
@@ -1179,13 +1189,13 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
         errString = "Error: Predict response failed: ";
         errString.append(description->valuestring);
         errString.append(". Response Code = " + std::to_string(code->valueint));
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
         errString = "Error: parse_json_workflow_predict_response: Predict response failed. Response description = ";
         errString.append(description->valuestring);
-        throw errString;
+        throw std::runtime_error(errString);
       }
     }
 
@@ -1195,7 +1205,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
     results = cJSON_GetObjectItemCaseSensitive(root, "results");
     if (!results) {
       errString = "Error: parse_json_workflow_predict_response: Predict response failed. No results found.";
-      throw errString;
+      throw std::runtime_error(errString);
     }
 
     cJSON * result = NULL;
@@ -1207,7 +1217,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
       cJSON * output = NULL;
       if (!outputs) {
         errString = "Error: parse_json_workflow_predict_response: Predict response failed. No results->outputs found.";
-        throw errString;
+        throw std::runtime_error(errString);
       }
       
       /*
@@ -1218,20 +1228,20 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
         status = cJSON_GetObjectItemCaseSensitive(output, "status");
         if (!status) {
           errString = "Error: parse_json_workflow_predict_response: Predict outputs status not found";
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         cJSON *code = cJSON_GetObjectItemCaseSensitive(status, "code");
         cJSON *description = cJSON_GetObjectItemCaseSensitive(status, "description");
         if (!cJSON_IsNumber(code) || code->valueint != 10000) {
           errString = "Error: parse_json_workflow_predict_response: Predict outputs response failed. Outputs response Code = " + std::to_string(code->valueint);
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
           errString = "Error: parse_json_workflow_predict_response: Predict outputs response failed. Outputs response description = ";
           errString.append(description->valuestring);
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         /*
@@ -1241,7 +1251,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
         outputs_data = cJSON_GetObjectItemCaseSensitive(output, "data");
         if (!outputs_data) {
           errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data found.";
-          throw errString;
+          throw std::runtime_error(errString);
         }
 
         /*
@@ -1251,7 +1261,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
         regions = cJSON_GetObjectItemCaseSensitive(outputs_data, "regions");
         if (!regions) {
           errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions found.";
-          throw errString;
+          throw std::runtime_error(errString);
         } 
 
         stringstream ssRegion;
@@ -1263,7 +1273,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
           bbox = cJSON_GetObjectItemCaseSensitive(region_info, "bounding_box");
           if (!cJSON_IsString(id)) {
             errString = "Error: parse_json_workflow_predict_response: Predict outputs response failed. No outputs->data->regions->bounding_box.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
           ssRegion << id->valuestring;
           if (bbox) {
@@ -1274,7 +1284,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
             if ( !cJSON_IsNumber(top_row) || !cJSON_IsNumber(left_col) ||
                 !cJSON_IsNumber(bottom_row) || !cJSON_IsNumber(right_col) ) {
               errString = "Error: parse_json_workflow_predict_response: Predict regions response failed. Could not parse bounding box";
-              throw errString;
+              throw std::runtime_error(errString);
             }
 
             ssRegion << sepString << top_row->valuedouble << sepString << left_col->valuedouble;
@@ -1288,7 +1298,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
           regions_data = cJSON_GetObjectItemCaseSensitive(region, "data");
           if (!regions_data) {
             errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions->data found.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           /*
@@ -1298,7 +1308,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
           concepts = cJSON_GetObjectItemCaseSensitive(regions_data, "concepts");
           if (!concepts) {
             errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions->data->concepts found.";
-            throw errString;
+            throw std::runtime_error(errString);
           }
 
           cJSON *concept = NULL;
@@ -1307,7 +1317,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
             id = cJSON_GetObjectItemCaseSensitive(concept, "id");
             if (!cJSON_IsString(id)) {
               errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions->data->concepts->id found.";
-              throw errString;
+              throw std::runtime_error(errString);
             }
 
             ssRegion << sepString << id->valuestring;
@@ -1316,7 +1326,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
             name = cJSON_GetObjectItemCaseSensitive(concept, "name");
             if (!cJSON_IsString(name)) {
               errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions->data->concepts->name found.";
-              throw errString;
+              throw std::runtime_error(errString);
             }
 
             ssRegion << sepString << name->valuestring;
@@ -1325,7 +1335,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
             value = cJSON_GetObjectItemCaseSensitive(concept, "value");
             if (!cJSON_IsNumber(value)) {
               errString = "Error: parse_json_workflow_predict_response: Predict response failed. No outputs->data->regions->data->concepts->value found.";
-              throw errString;
+              throw std::runtime_error(errString);
             }
 
             ssRegion << sepString << value->valuedouble;
@@ -1343,9 +1353,9 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
 
 
 
-  } catch (string &err) {
-    logging(err.c_str());
-    responseParsed.append(err);
+  } catch(const std::exception& e) {
+    logging(e.what());
+    responseParsed.append(e.what());
     responseParsed.append("\n");
     parseStatus = false;
   }
@@ -1372,7 +1382,7 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
         {
             errString = "Error before: ";
             errString.append(error_ptr);
-            throw errString;
+            throw std::runtime_error(errString);
         }
     }
 
@@ -1384,13 +1394,13 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
         errString = "Error: Predict response failed: ";
         errString.append(description->valuestring);
         errString.append(". Response Code = " + std::to_string(code->valueint));
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
         errString = "Error: parse_json_inputs_response: Predict response failed. Response description = ";
         errString.append(description->valuestring);
-        throw errString;
+        throw std::runtime_error(errString);
       }
     }
 
@@ -1401,7 +1411,7 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
     cJSON * input = NULL;
     if (!inputs) {
       errString = "Error: parse_json_inputs_response: Predict response failed. No inputs found.";
-      throw errString;
+      throw std::runtime_error(errString);
     }
     
     /*
@@ -1412,7 +1422,7 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       id = cJSON_GetObjectItemCaseSensitive(input, "id");
       if (!id) {
         errString = "Error: parse_json_inputs_response: inputs id not found";
-        throw errString;
+        throw std::runtime_error(errString);
       }
       imageID.assign(id->valuestring);
 
@@ -1420,14 +1430,14 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       status = cJSON_GetObjectItemCaseSensitive(input, "status");
       if (!status) {
         errString = "Error: parse_json_inputs_response: inputs status not found";
-        throw errString;
+        throw std::runtime_error(errString);
       }
 
       cJSON *code = cJSON_GetObjectItemCaseSensitive(status, "code");
       cJSON *description = cJSON_GetObjectItemCaseSensitive(status, "description");
       if (!cJSON_IsNumber(code)) {
         errString = "Error: parse_json_inputs_response:  inputs response failed.";
-        throw errString;
+        throw std::runtime_error(errString);
       }
       uploadComplete = true;
       if (code->valueint != 30000) {
@@ -1435,8 +1445,8 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       }
     }   // inputs
 
-  } catch (string &err) {
-    logging(err.c_str());
+  } catch(const std::exception& e) {
+    logging(e.what());
     parseStatus = false;
   }
   cJSON_Delete(root);
@@ -1617,7 +1627,7 @@ static int open_video_out_file_and_stream(AVFormatContext *pOutFormatContext, AV
   outStream->time_base = av_inv_q( outStream->r_frame_rate );
   //outStream->codec->time_base = outStream->time_base;
   outStream->time_base = outStream->time_base;
-  cout << "inCodecContext->bit_rate = " << inCodecContext->bit_rate;
+  cout << "inCodecContext->bit_rate = " << inCodecContext->bit_rate << endl;
 
   avformat_write_header( pOutFormatContext, NULL );
 
@@ -1718,75 +1728,75 @@ static bool write_json_config_file()
     config = cJSON_CreateObject();
     if (!config) {
       fprintf(stderr, "Error: could not create config cJSON object\n");
-      throw "Error: could not create config cJSON object";
+      throw std::runtime_error("Error: could not create config cJSON object");
     }
 
     j_api_key = cJSON_CreateObject();
     if (!j_api_key) {
-      throw "Error: could not create j_api_key cJSON object";
+      throw std::runtime_error("Error: could not create j_api_key cJSON object");
     }
     j_api_key = cJSON_CreateString(api_key.c_str());
     cJSON_AddItemToObject(config, "api_key", j_api_key);
 
     j_frames_to_skip = cJSON_CreateObject();
     if (!j_frames_to_skip) {
-      throw "Error: could not create j_frames_to_skip cJSON object";
+      throw std::runtime_error("Error: could not create j_frames_to_skip cJSON object");
     }
     j_frames_to_skip = cJSON_CreateNumber(frames_to_skip);
     cJSON_AddItemToObject(config, "frames_to_skip", j_frames_to_skip);
 
     j_jpeg_quality = cJSON_CreateObject();
     if (!j_jpeg_quality) {
-      throw "Error: could not create j_jpeg_quality cJSON object";
+      throw std::runtime_error("Error: could not create j_jpeg_quality cJSON object");
     }
     j_jpeg_quality = cJSON_CreateNumber(jpeg_quality);
     cJSON_AddItemToObject(config, "jpeg_quality", j_jpeg_quality);
 
     j_save_I_frames = cJSON_CreateObject();
     if (!j_save_I_frames) {
-      throw "Error: could not create j_save_I_frames cJSON object";
+      throw std::runtime_error("Error: could not create j_save_I_frames cJSON object");
     }
     j_save_I_frames = cJSON_CreateBool(save_I_frames);
     cJSON_AddItemToObject(config, "save_I_frames", j_save_I_frames);
 
     j_output_dir = cJSON_CreateObject();
     if (!j_output_dir) {
-      throw "Error: could not create j_output_dir cJSON object";
+      throw std::runtime_error("Error: could not create j_output_dir cJSON object");
     }
     j_output_dir = cJSON_CreateString(output_dir.c_str());
     cJSON_AddItemToObject(config, "output_dir", j_output_dir);
 
     j_print_debug = cJSON_CreateObject();
     if (!j_print_debug) {
-      throw "Error: could not create j_print_debug cJSON object";
+      throw std::runtime_error("Error: could not create j_print_debug cJSON object");
     }
     j_print_debug = cJSON_CreateBool(print_debug);
     cJSON_AddItemToObject(config, "print_debug", j_print_debug);
 
     j_save_video_file = cJSON_CreateObject();
     if (!j_save_video_file) {
-      throw "Error: could not create j_save_video_file cJSON object";
+      throw std::runtime_error("Error: could not create j_save_video_file cJSON object");
     }
     j_save_video_file = cJSON_CreateBool(save_video_file);
     cJSON_AddItemToObject(config, "save_video_file", j_save_video_file);
 
     j_upload = cJSON_CreateObject();
     if (!j_upload) {
-      throw "Error: could not create j_upload cJSON object";
+      throw std::runtime_error("Error: could not create j_upload cJSON object");
     }
     j_upload = cJSON_CreateBool(upload);
     cJSON_AddItemToObject(config, "upload", j_upload);
 
     j_metadata_structure = cJSON_CreateObject();
     if (!j_metadata_structure) {
-      throw "Error: could not create j_metadata_structure cJSON object";
+      throw std::runtime_error("Error: could not create j_metadata_structure cJSON object");
     }
     j_metadata_structure = cJSON_CreateString(metadata_structure.c_str());
     cJSON_AddItemToObject(config, "metadata_structure", j_metadata_structure);
 
     char *configJson = cJSON_Print(config);
     if(!configJson) {
-      throw "Error: cJSON_Print failed.";
+      throw std::runtime_error("Error: cJSON_Print failed.");
     }
 
     // Write configuration file.
@@ -1795,9 +1805,9 @@ static bool write_json_config_file()
     fclose(fp);
     free(configJson);
 
-  } catch (string &err) {
+  } catch(const std::exception& e) {
     if (printDebug) {
-      logging(err.c_str());
+      logging(e.what());
       status = false;
     }
   } 
@@ -1822,7 +1832,7 @@ static bool read_json_config_file()
   try {
 
     // read config file
-    FILE *fp = std::fopen("../config.json", "r");
+    FILE *fp = std::fopen("/files/config.json", "r");
     string contents;
     if (fp)
     {
@@ -1832,13 +1842,13 @@ static bool read_json_config_file()
       std::fread(&contents[0], 1, contents.size(), fp);
       std::fclose(fp);
     } else {
-      throw "Error: could not open config.json for reading.";
+      throw std::runtime_error("Error: could not open config.json for reading.");
     }
 
     config = cJSON_Parse(contents.c_str());
     if (!config) {
       fprintf(stderr, "Error: could not create config cJSON object\n");
-      throw "Error: could not create config cJSON object";
+      throw std::runtime_error("Error: could not create config cJSON object");
     }
 
     j_api_key = cJSON_GetObjectItemCaseSensitive(config, "api_key");
@@ -1847,7 +1857,7 @@ static bool read_json_config_file()
         api_key = j_api_key->valuestring;
         cout << "read_json_config_file: api_key = " << api_key << endl;
     } else {
-      throw "Error: could not parse api_key from config.json";
+      throw std::runtime_error("Error: could not parse api_key from config.json");
     }
 
     j_frames_to_skip = cJSON_GetObjectItemCaseSensitive(config, "frames_to_skip");
@@ -1856,7 +1866,7 @@ static bool read_json_config_file()
         frames_to_skip = j_frames_to_skip->valueint;
         cout << "read_json_config_file: frames_to_skip = " << frames_to_skip << endl;
     } else {
-      throw "Error: could not parse frames_to_skip from config.json";
+      throw std::runtime_error("Error: could not parse frames_to_skip from config.json");
     }
 
     j_jpeg_quality = cJSON_GetObjectItemCaseSensitive(config, "jpeg_quality");
@@ -1865,7 +1875,7 @@ static bool read_json_config_file()
         jpeg_quality = j_jpeg_quality->valueint;
         cout << "read_json_config_file: jpeg_quality = " << jpeg_quality << endl;
     } else {
-      throw "Error: could not parse jpeg_quality from config.json";
+      throw std::runtime_error("Error: could not parse jpeg_quality from config.json");
     }
 
     j_save_I_frames = cJSON_GetObjectItemCaseSensitive(config, "save_I_frames");
@@ -1878,7 +1888,7 @@ static bool read_json_config_file()
       }
       cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
     } else {
-      throw "Error: could not parse save_I_frames from config.json";
+      throw std::runtime_error("Error: could not parse save_I_frames from config.json");
     }
 
     j_output_dir = cJSON_GetObjectItemCaseSensitive(config, "output_dir");
@@ -1887,7 +1897,7 @@ static bool read_json_config_file()
         output_dir = j_output_dir->valuestring;
         cout << "read_json_config_file: output_dir = " << output_dir << endl;
     } else {
-      throw "Error: could not parse output_dir from config.json";
+      throw std::runtime_error("Error: could not parse output_dir from config.json");
     }
 
     j_print_debug = cJSON_GetObjectItemCaseSensitive(config, "print_debug");
@@ -1900,7 +1910,7 @@ static bool read_json_config_file()
       }
       cout << "read_json_config_file: print_debug = " << print_debug << endl;
     } else {
-      throw "Error: could not parse print_debug from config.json";
+      throw std::runtime_error("Error: could not parse print_debug from config.json");
     }
 
     j_save_video_file = cJSON_GetObjectItemCaseSensitive(config, "save_video_file");
@@ -1913,7 +1923,7 @@ static bool read_json_config_file()
       }
       cout << "read_json_config_file: save_video_file = " << save_video_file << endl;
     } else {
-      throw "Error: could not parse save_video_file from config.json";
+      throw std::runtime_error("Error: could not parse save_video_file from config.json");
     }
 
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
@@ -1926,7 +1936,7 @@ static bool read_json_config_file()
       }
       cout << "read_json_config_file: upload = " << upload << endl;
     } else {
-      throw "Error: could not parse upload from config.json";
+      throw std::runtime_error("Error: could not parse upload from config.json");
     }
 
     j_metadata_structure = cJSON_GetObjectItemCaseSensitive(config, "metadata_structure");
@@ -1935,16 +1945,16 @@ static bool read_json_config_file()
         metadata_structure = j_metadata_structure->valuestring;
         cout << "read_json_config_file: metadata_structure = " << metadata_structure << endl;
     } else {
-      throw "Error: could not parse metadata_structure from config.json";
+      throw std::runtime_error("Error: could not parse metadata_structure from config.json");
     }
 
     char *configJson = cJSON_Print(config);
     if(!configJson) {
-      throw "Error: cJSON_Print failed.";
+      throw std::runtime_error("Error: cJSON_Print failed.");
     }
-  } catch (string &err) {
+  } catch(const std::exception& e) {
     if (printDebug) {
-      logging(err.c_str());
+      logging(e.what());
       status = false;
     }
   } 
