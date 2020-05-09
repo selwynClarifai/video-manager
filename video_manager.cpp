@@ -57,7 +57,7 @@ AVPacket *pPacket = NULL;
 AVCodecContext *pCodecContext = NULL;
 AVFrame *pFrame = NULL;
 AVFormatContext *pOutFormatContext = NULL;
-std::mutex uploadMutex;
+std::mutex predictMutex;
 bool printDebug = false;
 // Thread variables
 thread predictThread;
@@ -65,6 +65,7 @@ bool threadRunning = true;
 bool predicting = false;
 string imageToUpload;
 // Globals for configuration file
+string base_url = "https://api.clarifai.com";
 string api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
 int frames_to_skip = 1;
 int jpeg_quality = 75;
@@ -498,10 +499,10 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
         // Send image(s) to portal
         //send_image_to_portal(imageFilename);
        // Trigger run_upload
-        if (uploadMutex.try_lock()) {
+        if (predictMutex.try_lock()) {
           predicting = true;
           imageToUpload = imageFilename;
-          uploadMutex.unlock();
+          predictMutex.unlock();
         }
 
       } else {
@@ -592,7 +593,7 @@ static bool upload_image(string &imageID, const string &imageFileName)
     /* First set the URL that is about to receive our POST. This URL can
        just as well be a https:// URL if that is what should receive the
        data. */ 
-    string uploadInputsURL = "https://api.clarifai.com/v2/inputs";
+    string uploadInputsURL = base_url + "/v2/inputs";
     curl_easy_setopt(handle, CURLOPT_URL, uploadInputsURL.c_str());
 
     // Specify headers
@@ -715,7 +716,7 @@ static bool verify_upload_complete(const string &imageID)
     /* First set the URL that is about to receive our POST. This URL can
        just as well be a https:// URL if that is what should receive the
        data. */ 
-    string uploadInputsURL = "https://api.clarifai.com/v2/inputs/" + imageID;
+    string uploadInputsURL = base_url + "/v2/inputs/" + imageID;
     curl_easy_setopt(handle, CURLOPT_URL, uploadInputsURL.c_str());
 
     // Specify headers
@@ -774,10 +775,10 @@ static int predict_on_image(const string &imageFileName)
     /* First set the URL that is about to receive our POST. This URL can
        just as well be a https:// URL if that is what should receive the
        data. */ 
-    //string workflowDetectConceptURL = "https://api.clarifai.com/v2/workflows/Detect-Concept/results";
+    //string workflowDetectConceptURL = base_url + "/v2/workflows/Detect-Concept/results";
     string generalDetectModelID = "cb649131aa72f86911815b0fe98dee55";
     string generalDetectModelVersion = "13c11ec702854e97a695ca2a0f809a95";
-    string predictGeneralDetectURL = "https://api.clarifai.com/v2/models/" + 
+    string predictGeneralDetectURL = base_url + "/v2/models/" + 
                   generalDetectModelID + "/versions/" + generalDetectModelVersion + "/outputs";
     curl_easy_setopt(handle, CURLOPT_URL, predictGeneralDetectURL.c_str());
 
@@ -888,11 +889,11 @@ static void run_predict()
   while (threadRunning) {
     std::this_thread::sleep_for(wait_duration);
 
-    uploadMutex.lock();
+    predictMutex.lock();
       _predicting = predicting;
       _imageToUpload = imageToUpload;
       predicting = false;
-    uploadMutex.unlock();
+    predictMutex.unlock();
 
     if (_predicting) {
       predict_on_image(_imageToUpload);
@@ -1713,6 +1714,7 @@ static bool write_json_config_file()
 {
   bool status = true;
   
+  cJSON *j_base_url = NULL;
   cJSON *j_api_key = NULL;
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
@@ -1731,33 +1733,19 @@ static bool write_json_config_file()
       throw std::runtime_error("Error: could not create config cJSON object");
     }
 
+    j_base_url = cJSON_CreateObject();
+    if (!j_base_url) {
+      throw std::runtime_error("Error: could not create j_api_key cJSON object");
+    }
+    j_base_url = cJSON_CreateString(base_url.c_str());
+    cJSON_AddItemToObject(config, "base_url", j_base_url);
+
     j_api_key = cJSON_CreateObject();
     if (!j_api_key) {
       throw std::runtime_error("Error: could not create j_api_key cJSON object");
     }
     j_api_key = cJSON_CreateString(api_key.c_str());
     cJSON_AddItemToObject(config, "api_key", j_api_key);
-
-    j_frames_to_skip = cJSON_CreateObject();
-    if (!j_frames_to_skip) {
-      throw std::runtime_error("Error: could not create j_frames_to_skip cJSON object");
-    }
-    j_frames_to_skip = cJSON_CreateNumber(frames_to_skip);
-    cJSON_AddItemToObject(config, "frames_to_skip", j_frames_to_skip);
-
-    j_jpeg_quality = cJSON_CreateObject();
-    if (!j_jpeg_quality) {
-      throw std::runtime_error("Error: could not create j_jpeg_quality cJSON object");
-    }
-    j_jpeg_quality = cJSON_CreateNumber(jpeg_quality);
-    cJSON_AddItemToObject(config, "jpeg_quality", j_jpeg_quality);
-
-    j_save_I_frames = cJSON_CreateObject();
-    if (!j_save_I_frames) {
-      throw std::runtime_error("Error: could not create j_save_I_frames cJSON object");
-    }
-    j_save_I_frames = cJSON_CreateBool(save_I_frames);
-    cJSON_AddItemToObject(config, "save_I_frames", j_save_I_frames);
 
     j_output_dir = cJSON_CreateObject();
     if (!j_output_dir) {
@@ -1779,6 +1767,27 @@ static bool write_json_config_file()
     }
     j_save_video_file = cJSON_CreateBool(save_video_file);
     cJSON_AddItemToObject(config, "save_video_file", j_save_video_file);
+
+    j_frames_to_skip = cJSON_CreateObject();
+    if (!j_frames_to_skip) {
+      throw std::runtime_error("Error: could not create j_frames_to_skip cJSON object");
+    }
+    j_frames_to_skip = cJSON_CreateNumber(frames_to_skip);
+    cJSON_AddItemToObject(config, "frames_to_skip", j_frames_to_skip);
+
+    j_save_I_frames = cJSON_CreateObject();
+    if (!j_save_I_frames) {
+      throw std::runtime_error("Error: could not create j_save_I_frames cJSON object");
+    }
+    j_save_I_frames = cJSON_CreateBool(save_I_frames);
+    cJSON_AddItemToObject(config, "save_I_frames", j_save_I_frames);
+
+    j_jpeg_quality = cJSON_CreateObject();
+    if (!j_jpeg_quality) {
+      throw std::runtime_error("Error: could not create j_jpeg_quality cJSON object");
+    }
+    j_jpeg_quality = cJSON_CreateNumber(jpeg_quality);
+    cJSON_AddItemToObject(config, "jpeg_quality", j_jpeg_quality);
 
     j_upload = cJSON_CreateObject();
     if (!j_upload) {
@@ -1818,6 +1827,7 @@ static bool read_json_config_file()
 {
   bool status = true;
   
+  cJSON *j_base_url = NULL;
   cJSON *j_api_key = NULL;
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
@@ -1851,6 +1861,15 @@ static bool read_json_config_file()
       throw std::runtime_error("Error: could not create config cJSON object");
     }
 
+    j_base_url = cJSON_GetObjectItemCaseSensitive(config, "base_url");
+    if (cJSON_IsString(j_base_url) && (j_base_url->valuestring != NULL))
+    {
+        api_key = j_base_url->valuestring;
+        cout << "read_json_config_file: base_url = " << base_url << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse base_url from config.json");
+    }
+
     j_api_key = cJSON_GetObjectItemCaseSensitive(config, "api_key");
     if (cJSON_IsString(j_api_key) && (j_api_key->valuestring != NULL))
     {
@@ -1858,37 +1877,6 @@ static bool read_json_config_file()
         cout << "read_json_config_file: api_key = " << api_key << endl;
     } else {
       throw std::runtime_error("Error: could not parse api_key from config.json");
-    }
-
-    j_frames_to_skip = cJSON_GetObjectItemCaseSensitive(config, "frames_to_skip");
-    if (cJSON_IsNumber(j_frames_to_skip))
-    {
-        frames_to_skip = j_frames_to_skip->valueint;
-        cout << "read_json_config_file: frames_to_skip = " << frames_to_skip << endl;
-    } else {
-      throw std::runtime_error("Error: could not parse frames_to_skip from config.json");
-    }
-
-    j_jpeg_quality = cJSON_GetObjectItemCaseSensitive(config, "jpeg_quality");
-    if (cJSON_IsNumber(j_jpeg_quality))
-    {
-        jpeg_quality = j_jpeg_quality->valueint;
-        cout << "read_json_config_file: jpeg_quality = " << jpeg_quality << endl;
-    } else {
-      throw std::runtime_error("Error: could not parse jpeg_quality from config.json");
-    }
-
-    j_save_I_frames = cJSON_GetObjectItemCaseSensitive(config, "save_I_frames");
-    if (cJSON_IsBool(j_save_I_frames))
-    {
-      if (cJSON_IsTrue(j_save_I_frames)) {
-        save_I_frames = true;
-      } else {
-        save_I_frames = false;
-      }
-      cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
-    } else {
-      throw std::runtime_error("Error: could not parse save_I_frames from config.json");
     }
 
     j_output_dir = cJSON_GetObjectItemCaseSensitive(config, "output_dir");
@@ -1924,6 +1912,37 @@ static bool read_json_config_file()
       cout << "read_json_config_file: save_video_file = " << save_video_file << endl;
     } else {
       throw std::runtime_error("Error: could not parse save_video_file from config.json");
+    }
+
+    j_frames_to_skip = cJSON_GetObjectItemCaseSensitive(config, "frames_to_skip");
+    if (cJSON_IsNumber(j_frames_to_skip))
+    {
+        frames_to_skip = j_frames_to_skip->valueint;
+        cout << "read_json_config_file: frames_to_skip = " << frames_to_skip << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse frames_to_skip from config.json");
+    }
+
+    j_save_I_frames = cJSON_GetObjectItemCaseSensitive(config, "save_I_frames");
+    if (cJSON_IsBool(j_save_I_frames))
+    {
+      if (cJSON_IsTrue(j_save_I_frames)) {
+        save_I_frames = true;
+      } else {
+        save_I_frames = false;
+      }
+      cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse save_I_frames from config.json");
+    }
+
+    j_jpeg_quality = cJSON_GetObjectItemCaseSensitive(config, "jpeg_quality");
+    if (cJSON_IsNumber(j_jpeg_quality))
+    {
+        jpeg_quality = j_jpeg_quality->valueint;
+        cout << "read_json_config_file: jpeg_quality = " << jpeg_quality << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse jpeg_quality from config.json");
     }
 
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
