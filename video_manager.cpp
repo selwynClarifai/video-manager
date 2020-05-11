@@ -556,7 +556,7 @@ static int write_jpeg(string &imageFileName, AVFrame *pFrame, int frameNumber)
 
     stringstream frame_filename;
     chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
-    frame_filename << output_dir + "/frame-" << 
+    frame_filename << output_dir + "/frame-" << frameNumber << "-" <<
               chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count() << ".jpg";
     FILE *file = fopen(frame_filename.str().c_str(), "wb");
     if (!file) {
