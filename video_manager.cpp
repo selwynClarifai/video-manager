@@ -58,7 +58,6 @@ AVCodecContext *pCodecContext = NULL;
 AVFrame *pFrame = NULL;
 AVFormatContext *pOutFormatContext = NULL;
 std::mutex predictMutex;
-bool printDebug = false;
 // Thread variables
 thread predictThread;
 bool threadRunning = true;
@@ -98,16 +97,20 @@ static int write_jpeg(string &imageFileName, AVFrame *pFrame, int frameNumber);
 // uploading and predicting on images
 static void run_predict();
 static void run_upload_and_predict();
-static bool upload_image(string &imageID, const string &imageFileName);
-static bool verify_upload_complete(const string &imageID);
-static int predict_on_image(const string &imageFileName);
-static bool create_json_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, cJSON *base64, 
+static bool upload_image(string &imageID, string &imageUrl, const string &imageFileName);
+static bool verify_upload_complete(const string &imageID, string &imageURL);
+static int predict_on_image(const string &imageFileName, const string &imageID = "", const string &imageURL = "");
+static bool create_json_image_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, cJSON *base64, 
                         const string &imageFileName);
+static bool create_json_image_id_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, 
+                          cJSON *idJson, cJSON *urlJson, const string &imageID, const string &imageURL);
+
 static void encode_jpeg_to_base64(cJSON **base64_string, const char *jpeg_file_name);
 static void encode_jpeg_to_base64_cpp(string &base64_string, const string &jpeg_file_name);
 static bool parse_json_predict_response(string &responseParsed, const string &responseJson);
 static bool parse_json_workflow_predict_response(string &responseParsed, const string &responseJson);
-static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, const string &responseJson);
+static bool parse_json_inputs_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson);
+static bool parse_json_input_by_id_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson);
 static string make_csv_header();
 static size_t write_predict_response(char *ptr, size_t size, size_t nmemb, void *responseJson);
 static void show_usage(std::string name);
@@ -146,7 +149,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
         break;
       case 'd':
-        printDebug = true;
+        print_debug = true;
         break;
       case 'f':
         frames_to_skip = atoi(optarg);
@@ -378,7 +381,7 @@ static int decode_video(char *videoSource, int frameInterval, bool saveVideo, bo
     // if it's the video stream
     int ix = 0;
     if (pPacket->stream_index == video_stream_index) {
-      if (printDebug) {
+      if (print_debug) {
         logging("AVPacket->pts %" PRId64, pPacket->pts);
       }
 
@@ -474,7 +477,7 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
 
     if (response >= 0) {
       // print every 250th frame
-      if (printDebug || pCodecContext->frame_number % 250 == 0) {
+      if (print_debug || pCodecContext->frame_number % 250 == 0) {
         logging(
             "Frame %d (type=%c, pix format=%d, size=%d bytes) pts %d key_frame %d [DTS %d]",
             pCodecContext->frame_number,
@@ -560,13 +563,11 @@ static int write_jpeg(string &imageFileName, AVFrame *pFrame, int frameNumber)
               chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count() << ".jpg";
     FILE *file = fopen(frame_filename.str().c_str(), "wb");
     if (!file) {
-        //cerr << "Could not open JPEG file: " << strerror(errno);
-        fprintf(stderr, "Could not open JPEG file: %s\n", strerror(errno));
+        cerr << "Could not open JPEG file: " << strerror(errno);
         return -1;
     }
     if (fwrite(jpegBuf, jpegSize, 1, file) < 1) {
-        //cerr << "Could not write JPEG file: " << strerror(errno);
-        fprintf(stderr, "Could not write JPEG file: %s\n", strerror(errno));
+         cerr << "Could not write JPEG file: " << strerror(errno);
         return -1;
     }
     fclose(file);
@@ -578,7 +579,7 @@ static int write_jpeg(string &imageFileName, AVFrame *pFrame, int frameNumber)
     handle = 0;
 }
 
-static bool upload_image(string &imageID, const string &imageFileName)
+static bool upload_image(string &imageID, string &imageUrl, const string &imageFileName)
 {
   bool status = true;
   CURL *handle;
@@ -625,8 +626,8 @@ static bool upload_image(string &imageID, const string &imageFileName)
       }
       cJSON_AddItemToObject(root, "inputs", inputs);
 
-      if (!create_json_inputs(inputs, input, data, image, base64, imageFileName)) {
-        throw std::runtime_error("Error: create_json_inputs failed.");
+      if (!create_json_image_inputs(inputs, input, data, image, base64, imageFileName)) {
+        throw std::runtime_error("Error: create_json_image_inputs failed.");
       }
 
       inputsJson = cJSON_PrintUnformatted(root);
@@ -668,22 +669,22 @@ static bool upload_image(string &imageID, const string &imageFileName)
       }
 
       // Parse JSON predict response
-      string imageID;
       bool uploadComplete = false;
-      if (parse_json_inputs_response(imageID, uploadComplete, response)) {
-        if (printDebug) {
-          logging("parse_json_inputs_response: imageFileName = %s, imageID = %s, uploadComplete = %d", 
-                                              imageFileName.c_str(), imageID.c_str(), uploadComplete);
+
+      if (parse_json_inputs_response(imageID, imageUrl, uploadComplete, response)) {
+        if (print_debug) {
+          logging("parse_json_inputs_response: imageFileName = %s, imageID = %s, imageUrl = %s, uploadComplete = %d", 
+                                              imageFileName.c_str(), imageID.c_str(), imageUrl.c_str(), uploadComplete);
         }
       } else {
-        if (printDebug) {
+        if (print_debug) {
           logging("parse_json_inputs_response: FAIL");
         }
       }
       status = uploadComplete;
 
   } catch(const std::exception& e) {
-      if (printDebug) {
+      if (print_debug) {
         logging(e.what());
         status = false;
       }
@@ -701,7 +702,7 @@ static bool upload_image(string &imageID, const string &imageFileName)
   return status;
 }
 
-static bool verify_upload_complete(const string &imageID)
+static bool verify_upload_complete(const string &imageID, string &imageURL)
 {
   CURL *handle;
   CURLcode res;
@@ -742,12 +743,12 @@ static bool verify_upload_complete(const string &imageID)
 
     // Parse JSON predict response
     string imageID;
-    if (parse_json_inputs_response(imageID, uploadComplete, response)) {
-      if (printDebug) {
+    if (parse_json_input_by_id_response(imageID, imageURL, uploadComplete, response)) {
+      if (print_debug) {
         logging("parse_json_inputs_response: imageID = %s, uploadComplete = %d", imageID.c_str(), uploadComplete);
       }
     } else {
-      if (printDebug) {
+      if (print_debug) {
         logging("parse_json_inputs_response: FAIL");
       }
     }
@@ -761,7 +762,7 @@ static bool verify_upload_complete(const string &imageID)
   return uploadComplete;
 }
 
-static int predict_on_image(const string &imageFileName)
+static int predict_on_image(const string &imageFileName, const string &imageID, const string &imageURL)
 {
   CURL *handle;
   CURLcode res;
@@ -796,6 +797,8 @@ static int predict_on_image(const string &imageFileName)
     cJSON *data = NULL;
     cJSON *image = NULL;
     cJSON *base64 = NULL;
+    cJSON *idJson = NULL;
+    cJSON *urlJson = NULL;
     cJSON *root = NULL;
     try {
       root = cJSON_CreateObject();
@@ -810,15 +813,19 @@ static int predict_on_image(const string &imageFileName)
       }
       cJSON_AddItemToObject(root, "inputs", inputs);
 
-      if (!create_json_inputs(inputs, input, data, image, base64, imageFileName)) {
-        throw std::runtime_error("Error: create_json_inputs failed.");
+      if (!imageID.empty() && !imageURL.empty()) {
+        if (!create_json_image_id_inputs(inputs, input, data, image, idJson, urlJson, imageID, imageURL)) {
+          throw std::runtime_error("Error: create_json_image_inputs failed.");
+        }
+      } else if (!create_json_image_inputs(inputs, input, data, image, base64, imageFileName)) {
+        throw std::runtime_error("Error: create_json_image_inputs failed.");
       }
 
       inputsJson = cJSON_PrintUnformatted(root);
       if(!inputsJson) {
         throw std::runtime_error("Error: cJSON_PrintUnformatted failed.");
       }
-
+      
       curl_easy_setopt(handle, CURLOPT_POSTFIELDS, inputsJson);
 
       // Write response to output file
@@ -849,11 +856,11 @@ static int predict_on_image(const string &imageFileName)
       // Parse JSON predict response
       string responseParsed;
       if (parse_json_predict_response(responseParsed, response)) {
-        if (printDebug) {
+        if (print_debug) {
           logging("parse_json_predict_response: SUCCESS");
         }
       } else {
-        if (printDebug) {
+        if (print_debug) {
           logging("parse_json_predict_response: FAIL");
         }
         responseParsed.append("parse_json_predict_response: FAIL\n");
@@ -863,7 +870,7 @@ static int predict_on_image(const string &imageFileName)
         fclose(fp);
       }
   } catch(const std::exception& e) {
-      if (printDebug) {
+      if (print_debug) {
         logging(e.what());
       }
     }
@@ -896,7 +903,7 @@ static void run_predict()
     predictMutex.unlock();
 
     if (_predicting) {
-      predict_on_image(_imageToUpload);
+      predict_on_image(_imageToUpload, "");
     }
   }
 }
@@ -916,17 +923,19 @@ static void run_upload_and_predict()
   size_t totalJpgs = jpgFiles.size();
   for (auto const &jpg : jpgFiles) {
     string _imageID;
+    string _imageURL;
     // the image upload is asynchronous
-    bool uploadComplete = upload_image(_imageID, jpg);
+    bool uploadComplete = upload_image(_imageID, _imageURL, jpg);
 
     // while image is uploading, simultaneously predict
-    predict_on_image(jpg);
+    //predict_on_image(jpg);
 
     // finally, if image has not yet uploaded, keep verifying its upload until complete
     while (!uploadComplete) {
       std::this_thread::sleep_for(wait_duration);
-      uploadComplete = verify_upload_complete(_imageID);
+      uploadComplete = verify_upload_complete(_imageID, _imageURL);
     }
+    predict_on_image(jpg, _imageID, _imageURL);
     uploadCount++;
     if (uploadCount % 100 == 0) {
       logging("Uploaded and predicted on %d of %d images.", uploadCount, totalJpgs);
@@ -1366,7 +1375,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
 }
 
 // Parse JSON inputs response
-static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, const string &responseJson)
+static bool parse_json_inputs_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson)
 {
   string errString;
   bool parseStatus = true;
@@ -1399,7 +1408,7 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       }
 
       if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
-        errString = "Error: parse_json_inputs_response: Predict response failed. Response description = ";
+        errString = "Error: parse_json_inputs_response: response failed. Response description = ";
         errString.append(description->valuestring);
         throw std::runtime_error(errString);
       }
@@ -1411,12 +1420,12 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
     inputs = cJSON_GetObjectItemCaseSensitive(root, "inputs");
     cJSON * input = NULL;
     if (!inputs) {
-      errString = "Error: parse_json_inputs_response: Predict response failed. No inputs found.";
+      errString = "Error: parse_json_inputs_response: response failed. No inputs found.";
       throw std::runtime_error(errString);
     }
     
     /*
-    * inputs->status
+    * inputs->id
     */
     cJSON_ArrayForEach(input, inputs) {
       cJSON *id = NULL;
@@ -1427,6 +1436,32 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       }
       imageID.assign(id->valuestring);
 
+    /*
+    * inputs->data
+    */
+      cJSON *data = NULL;
+      data = cJSON_GetObjectItemCaseSensitive(input, "data");
+      if (!id) {
+        errString = "Error: parse_json_inputs_response: inputs data not found";
+        throw std::runtime_error(errString);
+      }
+      cJSON *image = NULL;
+      image = cJSON_GetObjectItemCaseSensitive(data, "image");
+      if (!image) {
+        errString = "Error: parse_json_inputs_response: inputs image not found";
+        throw std::runtime_error(errString);
+      }
+      cJSON *url = NULL;
+      url = cJSON_GetObjectItemCaseSensitive(image, "url");
+      if (!image) {
+        errString = "Error: parse_json_inputs_response: inputs url not found";
+        throw std::runtime_error(errString);
+      }
+      imageUrl.assign(url->valuestring);
+
+    /*
+    * inputs->status
+    */
       cJSON *status = NULL;
       status = cJSON_GetObjectItemCaseSensitive(input, "status");
       if (!status) {
@@ -1437,7 +1472,7 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
       cJSON *code = cJSON_GetObjectItemCaseSensitive(status, "code");
       cJSON *description = cJSON_GetObjectItemCaseSensitive(status, "description");
       if (!cJSON_IsNumber(code)) {
-        errString = "Error: parse_json_inputs_response:  inputs response failed.";
+        errString = "Error: parse_json_inputs_response: inputs response failed.";
         throw std::runtime_error(errString);
       }
       uploadComplete = true;
@@ -1455,7 +1490,117 @@ static bool parse_json_inputs_response(string &imageID, bool &uploadComplete, co
   return parseStatus;
 }
 
-static bool create_json_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, cJSON *base64, 
+// Parse JSON Get input by ID response: https://docs.clarifai.com/api-guide/data-management/inputs#get-input-by-id
+static bool parse_json_input_by_id_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson)
+{
+  string errString;
+  bool parseStatus = true;
+  cJSON *root = cJSON_Parse(responseJson.c_str());
+  const cJSON *results = NULL;
+  const cJSON *rootStatus = NULL;
+  const cJSON *input = NULL;
+
+  try {
+    if (root == NULL)
+    {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            errString = "Error before: ";
+            errString.append(error_ptr);
+            throw std::runtime_error(errString);
+        }
+    }
+
+    rootStatus = cJSON_GetObjectItemCaseSensitive(root, "status");
+    if (rootStatus) {
+      cJSON *code = cJSON_GetObjectItemCaseSensitive(rootStatus, "code");
+      cJSON *description = cJSON_GetObjectItemCaseSensitive(rootStatus, "description");
+      if (!cJSON_IsNumber(code) || code->valueint != 10000) {
+        errString = "Error: parse_json_input_by_id_response: response failed: ";
+        errString.append(description->valuestring);
+        errString.append(". Response Code = " + std::to_string(code->valueint));
+        throw std::runtime_error(errString);
+      }
+
+      if (!cJSON_IsString(description) || strcmp(description->valuestring, "Ok") != 0) {
+        errString = "Error: parse_json_input_by_id_response: response failed. Response description = ";
+        errString.append(description->valuestring);
+        throw std::runtime_error(errString);
+      }
+    }
+
+    /*
+    * input
+    */
+    input = cJSON_GetObjectItemCaseSensitive(root, "input");
+    if (!input) {
+      errString = "Error: parse_json_input_by_id_response: response failed. No input found.";
+      throw std::runtime_error(errString);
+    }
+
+    /*
+    * input->data
+    */
+    cJSON *data = NULL;
+    data = cJSON_GetObjectItemCaseSensitive(input, "data");
+    if (!data) {
+      errString = "Error: parse_json_input_by_id_response: input data not found";
+      throw std::runtime_error(errString);
+    }
+    cJSON *image = NULL;
+    image = cJSON_GetObjectItemCaseSensitive(data, "image");
+    if (!image) {
+      errString = "Error: parse_json_input_by_id_response: input image not found";
+      throw std::runtime_error(errString);
+    }
+    cJSON *url = NULL;
+    url = cJSON_GetObjectItemCaseSensitive(image, "url");
+    if (!image) {
+      errString = "Error: parse_json_input_by_id_response: input url not found";
+      throw std::runtime_error(errString);
+    }
+    imageUrl.assign(url->valuestring);
+  
+    /*
+    * input->status
+    */
+    cJSON *id = NULL;
+    id = cJSON_GetObjectItemCaseSensitive(input, "id");
+    if (!id) {
+      errString = "Error: parse_json_input_by_id_response: input id not found";
+      throw std::runtime_error(errString);
+    }
+    imageID.assign(id->valuestring);
+
+    cJSON *status = NULL;
+    status = cJSON_GetObjectItemCaseSensitive(input, "status");
+    if (!status) {
+      errString = "Error: parse_json_input_by_id_response: inputs status not found";
+      throw std::runtime_error(errString);
+    }
+
+    cJSON *code = cJSON_GetObjectItemCaseSensitive(status, "code");
+    cJSON *description = cJSON_GetObjectItemCaseSensitive(status, "description");
+    if (!cJSON_IsNumber(code)) {
+      errString = "Error: parse_json_input_by_id_response: inputs response failed.";
+      throw std::runtime_error(errString);
+    }
+    uploadComplete = true;
+    if (code->valueint != 30000) {
+      uploadComplete = false;
+    }
+
+  } catch(const std::exception& e) {
+    logging(e.what());
+    parseStatus = false;
+  }
+  cJSON_Delete(root);
+
+  return parseStatus;
+}
+
+static bool create_json_image_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, cJSON *base64, 
                         const string &imageFileName)
 {
     /*
@@ -1489,6 +1634,51 @@ static bool create_json_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *
       return false;
     }
     cJSON_AddItemToObject(image, "base64", base64);
+
+    return true;
+}
+
+static bool create_json_image_id_inputs(cJSON *inputs, cJSON *input, cJSON *data, cJSON *image, 
+                          cJSON *idJson, cJSON *urlJson, const string &imageID, const string &imageURL)
+{
+    /*
+    * Add input images
+    */
+    input = cJSON_CreateObject();
+    if (!input) {
+      fprintf(stderr, "Error: could not create input cJSON object\n");
+      return false;
+    }
+    cJSON_AddItemToArray(inputs, input);
+
+    // add imageID to request.
+    idJson = cJSON_CreateObject();
+    if (!idJson) {
+      throw std::runtime_error("Error: could not create idJson cJSON object");
+    }
+    idJson = cJSON_CreateString(imageID.c_str());
+    cJSON_AddItemToObject(input, "id", idJson);
+
+    data = cJSON_CreateObject();
+    if (!data) {
+      fprintf(stderr, "Error: could not create data cJSON object\n");
+      return false;
+    }
+    cJSON_AddItemToObject(input, "data", data);
+
+    image = cJSON_CreateObject();
+    if (!image) {
+      fprintf(stderr, "Error: could not create image cJSON object\n");
+      return false;
+    }
+    cJSON_AddItemToObject(data, "image", image);
+
+    urlJson = cJSON_CreateString(imageURL.c_str());
+    if (!urlJson) {
+      fprintf(stderr, "Error: could not create urlJson cJSON object\n");
+      return false;
+    }
+    cJSON_AddItemToObject(image, "url", urlJson);
 
     return true;
 }
@@ -1815,7 +2005,7 @@ static bool write_json_config_file()
     free(configJson);
 
   } catch(const std::exception& e) {
-    if (printDebug) {
+    if (print_debug) {
       logging(e.what());
       status = false;
     }
@@ -1972,7 +2162,7 @@ static bool read_json_config_file()
       throw std::runtime_error("Error: cJSON_Print failed.");
     }
   } catch(const std::exception& e) {
-    if (printDebug) {
+    if (print_debug) {
       logging(e.what());
       status = false;
     }
