@@ -32,6 +32,7 @@ extern "C" {
 #include <inttypes.h>
 #include <unistd.h> // for getopt
 #include <dirent.h> // for directory access
+#include <math.h>   // for round
 
 
 // C++ includes
@@ -63,12 +64,15 @@ thread predictThread;
 bool threadRunning = true;
 bool predicting = false;
 string imageToUpload;
+int imageWidth = 0;
+int imageHeight = 0;
 // Globals for configuration file
 string base_url = "https://api.clarifai.com";
 string api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
 int frames_to_skip = 1;
 int jpeg_quality = 75;
 string output_dir = "/files/images";
+bool imageSizeWritten = false;
 bool save_I_frames = false;
 bool save_video_file = true;
 bool print_debug = false;
@@ -125,6 +129,8 @@ static bool write_json_config_file();
 static bool read_json_config_file();
 static bool found_config_file();
 static void write_metadata_from_config();
+static bool read_image_size_file();
+static bool write_image_size_file(int width, int height);
 
 // Define the function to be called when ctrl-c (SIGINT) is sent to process
 void signal_callback_handler(int signum) {
@@ -192,6 +198,7 @@ int main(int argc, char *argv[])
   int status = 0;
   if (upload) {
     cout << "UPLOADING AND PREDICTING" << endl;
+    read_image_size_file();
     run_upload_and_predict();
   } else {
     int status = decode_video(argv[optind], frames_to_skip, save_video_file, save_I_frames);
@@ -488,6 +495,15 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
             pFrame->key_frame,
             pFrame->coded_picture_number
         );
+      }
+
+      /*
+      * Write image dimensions to file. Dimensions will later be used on predict response.
+      * Predict on a detection model returns bounding boxes in relative coordinates (0-1).
+      */
+      if (!imageSizeWritten && !upload) {
+        write_image_size_file(pFrame->width, pFrame->height);
+        imageSizeWritten = true;
       }
 
       char frame_filename[1024];
@@ -1091,8 +1107,14 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
             throw std::runtime_error(errString);
           }
 
-          ssRegion << sepString << top_row->valuedouble << sepString << left_col->valuedouble;
-          ssRegion << sepString << bottom_row->valuedouble << sepString << right_col->valuedouble;
+          // Pixel coordinates: the top-left corner is (0,0)
+          int topRowPixel = static_cast<int>(round(top_row->valuedouble * imageHeight));
+          int leftColPixel = static_cast<int>(round(left_col->valuedouble * imageWidth));
+          int bottomRowPixel = static_cast<int>(round(bottom_row->valuedouble * imageHeight));
+          int rightColPixel = static_cast<int>(round(right_col->valuedouble * imageWidth));
+
+          ssRegion << sepString << topRowPixel << sepString << leftColPixel;
+          ssRegion << sepString << bottomRowPixel << sepString << rightColPixel;
         }
 
         /*
@@ -1868,7 +1890,7 @@ static bool found_config_file()
   struct dirent *epdf;
   bool found = false;
 
-  dpdf = opendir("/files");
+  dpdf = opendir("..");
   if (dpdf != NULL){
     while (epdf = readdir(dpdf)){
       if (strcmp(epdf->d_name, "config.json") == 0) {
@@ -2005,10 +2027,8 @@ static bool write_json_config_file()
     free(configJson);
 
   } catch(const std::exception& e) {
-    if (print_debug) {
-      logging(e.what());
-      status = false;
-    }
+    logging(e.what());
+    status = false;
   } 
   return status;
 }
@@ -2032,7 +2052,7 @@ static bool read_json_config_file()
   try {
 
     // read config file
-    FILE *fp = std::fopen("/files/config.json", "r");
+    FILE *fp = std::fopen("../config.json", "r");
     string contents;
     if (fp)
     {
@@ -2054,7 +2074,7 @@ static bool read_json_config_file()
     j_base_url = cJSON_GetObjectItemCaseSensitive(config, "base_url");
     if (cJSON_IsString(j_base_url) && (j_base_url->valuestring != NULL))
     {
-        api_key = j_base_url->valuestring;
+        base_url = j_base_url->valuestring;
         cout << "read_json_config_file: base_url = " << base_url << endl;
     } else {
       throw std::runtime_error("Error: could not parse base_url from config.json");
@@ -2162,10 +2182,8 @@ static bool read_json_config_file()
       throw std::runtime_error("Error: cJSON_Print failed.");
     }
   } catch(const std::exception& e) {
-    if (print_debug) {
-      logging(e.what());
-      status = false;
-    }
+    logging(e.what());
+    status = false;
   } 
   return status;
 }
@@ -2216,3 +2234,121 @@ static void write_metadata_from_config()
     return chrono::duration_cast< chrono::milliseconds >(
               chrono::system_clock::now().time_since_epoch());
   }
+
+  /*
+  * Write image dimensions to file. Dimensions will later be used on predict response.
+  * Predict on a detection model returns bounding boxes in relative coordinates (0-1).
+  */
+  static bool write_image_size_file(int width, int height)
+  {
+    if (width <= 0) {
+      logging("write_image_size_file: Error: image width = %d", width);
+      return false;
+    }
+    if (height <= 0) {
+      logging("write_image_size_file: Error: image height = %d", height);
+      return false;
+    }
+
+    imageWidth = width;
+    imageHeight = height;
+
+    string imageSizeFilename = output_dir + "/image_size.json";
+    FILE *fp = fopen(imageSizeFilename.c_str(), "w");
+
+    if (!fp) {
+      return false;
+    }
+
+    bool status = true;
+    cJSON *j_root = NULL;
+    cJSON *j_width = NULL;
+    cJSON *j_height = NULL;
+    try {
+      j_root = cJSON_CreateObject();
+      if (!j_root) {
+        throw std::runtime_error("write_image_size_file: Error: could not create j_root cJSON object");
+      }
+
+      j_width = cJSON_CreateObject();
+      if (!j_width) {
+        throw std::runtime_error("write_image_size_file: Error: could not create j_width cJSON object");
+      }
+      j_width = cJSON_CreateNumber(width);
+      cJSON_AddItemToObject(j_root, "image_width", j_width);
+
+      j_height = cJSON_CreateObject();
+      if (!j_height) {
+        throw std::runtime_error("write_image_size_file: Error: could not create j_height cJSON object");
+      }
+      j_height = cJSON_CreateNumber(height);
+      cJSON_AddItemToObject(j_root, "image_height", j_height);
+    } catch (const std::exception &e) {
+      logging(e.what());
+      status = false;
+    }
+
+    char *imageSizeJson = cJSON_Print(j_root);
+    fwrite(imageSizeJson, sizeof(char), strlen(imageSizeJson), fp);
+    fclose(fp);
+    free(imageSizeJson);
+    return status;
+  }
+
+
+/*
+* Read image dimensions from file. Dimensions will be used on predict response.
+* Predict on a detection model returns bounding boxes in relative coordinates (0-1).
+*/
+static bool read_image_size_file()
+{
+  bool status = true;
+  cJSON *j_root = NULL;
+  cJSON *j_width = NULL;
+  cJSON *j_height = NULL;
+
+  try {
+
+    // read image_size.json file
+    string imageSizeFilename = output_dir + "/image_size.json";
+    FILE *fp = std::fopen(imageSizeFilename.c_str(), "r");
+    string contents;
+    if (fp)
+    {
+      std::fseek(fp, 0, SEEK_END);
+      contents.resize(std::ftell(fp));
+      std::rewind(fp);
+      std::fread(&contents[0], 1, contents.size(), fp);
+      std::fclose(fp);
+    } else {
+      string err = "read_image_size_file: Error: could not open " + imageSizeFilename + " for reading.";
+      throw std::runtime_error(err.c_str());
+    }
+
+    j_root = cJSON_Parse(contents.c_str());
+    if (!j_root) {
+      throw std::runtime_error("read_image_size_file: Error: could not create j_root cJSON object");
+    }
+
+    j_width = cJSON_GetObjectItemCaseSensitive(j_root, "image_width");
+    if (cJSON_IsNumber(j_width) && (j_width->valueint != NULL))
+    {
+        imageWidth = j_width->valueint;
+    } else {
+      string err = "read_image_size_file: Error: could not parse image_width from " + imageSizeFilename + ".";
+      throw std::runtime_error(err.c_str());
+    }
+
+    j_height = cJSON_GetObjectItemCaseSensitive(j_root, "image_height");
+    if (cJSON_IsNumber(j_height) && (j_height->valueint != NULL))
+    {
+        imageHeight = j_height->valueint;
+    } else {
+      string err = "read_image_size_file: Error: could not parse image_height from " + imageSizeFilename + ".";
+      throw std::runtime_error(err.c_str());
+    }
+  } catch(const std::exception& e) {
+    logging(e.what());
+    status = false;
+  }
+}
