@@ -69,6 +69,8 @@ int imageHeight = 0;
 // Globals for configuration file
 string base_url = "https://api.clarifai.com";
 string api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
+string model_id = "cb649131aa72f86911815b0fe98dee55"; // General Detection
+string model_version = "13c11ec702854e97a695ca2a0f809a95"; // General Detection
 int frames_to_skip = 1;
 int jpeg_quality = 75;
 string output_dir = "/files/images";
@@ -793,11 +795,9 @@ static int predict_on_image(const string &imageFileName, const string &imageID, 
        just as well be a https:// URL if that is what should receive the
        data. */ 
     //string workflowDetectConceptURL = base_url + "/v2/workflows/Detect-Concept/results";
-    string generalDetectModelID = "cb649131aa72f86911815b0fe98dee55";
-    string generalDetectModelVersion = "13c11ec702854e97a695ca2a0f809a95";
-    string predictGeneralDetectURL = base_url + "/v2/models/" + 
-                  generalDetectModelID + "/versions/" + generalDetectModelVersion + "/outputs";
-    curl_easy_setopt(handle, CURLOPT_URL, predictGeneralDetectURL.c_str());
+    string predictURL = base_url + "/v2/models/" + 
+                  model_id + "/versions/" + model_version + "/outputs";
+    curl_easy_setopt(handle, CURLOPT_URL, predictURL.c_str());
 
     // Specify headers
     struct curl_slist *headers=NULL;
@@ -1928,6 +1928,8 @@ static bool write_json_config_file()
   
   cJSON *j_base_url = NULL;
   cJSON *j_api_key = NULL;
+  cJSON *j_model_id = NULL;
+  cJSON *j_model_version = NULL;
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
   cJSON *j_save_I_frames = NULL;
@@ -1958,6 +1960,20 @@ static bool write_json_config_file()
     }
     j_api_key = cJSON_CreateString(api_key.c_str());
     cJSON_AddItemToObject(config, "api_key", j_api_key);
+
+    j_model_id = cJSON_CreateObject();
+    if (!j_model_id) {
+      throw std::runtime_error("Error: could not create j_model_id cJSON object");
+    }
+    j_model_id = cJSON_CreateString(model_id.c_str());
+    cJSON_AddItemToObject(config, "model_id", j_model_id);
+
+    j_model_version = cJSON_CreateObject();
+    if (!j_model_version) {
+      throw std::runtime_error("Error: could not create j_model_version cJSON object");
+    }
+    j_model_version = cJSON_CreateString(model_version.c_str());
+    cJSON_AddItemToObject(config, "model_version", j_model_version);
 
     j_output_dir = cJSON_CreateObject();
     if (!j_output_dir) {
@@ -2039,6 +2055,8 @@ static bool read_json_config_file()
   
   cJSON *j_base_url = NULL;
   cJSON *j_api_key = NULL;
+  cJSON *j_model_id = NULL;
+  cJSON *j_model_version = NULL;
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
   cJSON *j_save_I_frames = NULL;
@@ -2087,6 +2105,24 @@ static bool read_json_config_file()
         cout << "read_json_config_file: api_key = " << api_key << endl;
     } else {
       throw std::runtime_error("Error: could not parse api_key from config.json");
+    }
+
+    j_model_id = cJSON_GetObjectItemCaseSensitive(config, "model_id");
+    if (cJSON_IsString(j_model_id) && (j_model_id->valuestring != NULL))
+    {
+        model_id = j_model_id->valuestring;
+        cout << "read_json_config_file: model_id = " << model_id << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse model_id from config.json");
+    }
+
+    j_model_version = cJSON_GetObjectItemCaseSensitive(config, "model_version");
+    if (cJSON_IsString(j_model_version) && (j_model_version->valuestring != NULL))
+    {
+        model_version = j_model_version->valuestring;
+        cout << "read_json_config_file: model_version = " << model_version << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse model_version from config.json");
     }
 
     j_output_dir = cJSON_GetObjectItemCaseSensitive(config, "output_dir");
