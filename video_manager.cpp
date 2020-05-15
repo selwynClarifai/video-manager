@@ -36,6 +36,7 @@ extern "C" {
 
 
 // C++ includes
+#include <map>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -45,6 +46,7 @@ extern "C" {
 #include <mutex>
 #include <chrono>
 #include <ctime>
+#include <fstream>
 //#include "nlohmann/json.hpp"
 
 using namespace std;
@@ -59,6 +61,7 @@ AVCodecContext *pCodecContext = NULL;
 AVFrame *pFrame = NULL;
 AVFormatContext *pOutFormatContext = NULL;
 std::mutex predictMutex;
+std::map<int, int64_t> ptsMap;  // record PTS values during decode. Add to Alarm files in postprocessing.
 // Thread variables
 thread predictThread;
 bool threadRunning = true;
@@ -117,7 +120,8 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
 static bool parse_json_workflow_predict_response(string &responseParsed, const string &responseJson);
 static bool parse_json_inputs_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson);
 static bool parse_json_input_by_id_response(string &imageID, string &imageUrl, bool &uploadComplete, const string &responseJson);
-static string make_csv_header();
+static string make_alarm_header(const string &imageFilename);
+static string make_detections_header();
 static size_t write_predict_response(char *ptr, size_t size, size_t nmemb, void *responseJson);
 static void show_usage(std::string name);
 static int open_video_out_file_and_stream(AVFormatContext *pOutFormatContext, AVFormatContext *pInFormatContext, 
@@ -133,6 +137,7 @@ static bool found_config_file();
 static void write_metadata_from_config();
 static bool read_image_size_file();
 static bool write_image_size_file(int width, int height);
+static void read_frame_pts_file_to_map();
 
 // Define the function to be called when ctrl-c (SIGINT) is sent to process
 void signal_callback_handler(int signum) {
@@ -201,6 +206,7 @@ int main(int argc, char *argv[])
   if (upload) {
     cout << "UPLOADING AND PREDICTING" << endl;
     read_image_size_file();
+    read_frame_pts_file_to_map();
     run_upload_and_predict();
   } else {
     int status = decode_video(argv[optind], frames_to_skip, save_video_file, save_I_frames);
@@ -395,12 +401,15 @@ static int decode_video(char *videoSource, int frameInterval, bool saveVideo, bo
       }
 
       response = decode_packet(pPacket, pCodecContext, pFrame, framesSkipped, frameInterval, I_frames);
-      if (response < 0)
+      if (response < 0) {
         break;
+      }
+
+      // record PTS of this video frame. Will be used to write Alarm files in postprocessing.
+      ptsMap[pCodecContext->frame_number] = pPacket->pts;
 
       // Save to video output file
       if (saveVideo) {
-
         // set pPacket->stream_index to 0 because pOutFormatContext contains only one stream - for video.
         pPacket->stream_index = 0;
         int stat = av_interleaved_write_frame(pOutFormatContext, pPacket);
@@ -433,6 +442,20 @@ static void cleanup()
   avcodec_free_context(&pCodecContext);
 
   close_video_out_file();
+
+  // Write Frame number and PTS to file.
+  FILE *fp = NULL;
+  string outFile = output_dir + "/frame_pts.txt";
+  fp = fopen(outFile.c_str(), "w");
+  if (fp) {
+    for (auto pts : ptsMap) {
+      cout << pts.first << " " << pts.second << endl;
+      stringstream line;
+      line << pts.first << " " << pts.second << endl;
+      fwrite(line.str().c_str(), sizeof(char), line.str().size(), fp);
+    }
+    fclose(fp);
+  }
 }
 static void show_usage(std::string name)
 {
@@ -871,6 +894,10 @@ static int predict_on_image(const string &imageFileName, const string &imageID, 
 
       // Parse JSON predict response
       string responseParsed;
+      // Write Alarm and detections header
+      responseParsed.append(make_alarm_header(imageFileName));
+      responseParsed.append(make_detections_header());
+
       if (parse_json_predict_response(responseParsed, response)) {
         if (print_debug) {
           logging("parse_json_predict_response: SUCCESS");
@@ -964,8 +991,50 @@ static void run_upload_and_predict()
                     jpgFiles.size(), chrono::duration_cast<chrono::seconds>(endTime-startTime).count());
 }
 
+// Header for the top part of the Alarm file.
+string make_alarm_header(const string &imageFilename)
+{
+  string sepString = ", ";    // separator string for CSV file
+  stringstream header;
+  header << "Frame_Num" << sepString;
+  header << "PTS" << sepString;
+  header << "Epoch_Timestamp" << sepString;
+  header << "Image_Width" << sepString;
+  header << "Image_Height" << sepString;
+  header << endl;
 
-string make_csv_header()
+  /*
+  * Parse frame number and epoch timestamp (ms since Jan 1, 1970) from imageFilename.
+  * imageFilename looks like: frame-68-1589507779583.jpg
+  * Where 68 is frame number, and 1589507779583 is epoch timestamp.
+  */
+  size_t dash1 = imageFilename.find_first_of('-', 0);
+  if (dash1 == string::npos) {
+    return "";
+  }
+  size_t dash2 = imageFilename.find_first_of('-', dash1+1);
+  if (dash2 == string::npos) {
+    return "";
+  }
+  string frameString = imageFilename.substr(dash1+1, dash2-dash1-1);
+  int frameNum = stoi(frameString);
+
+  size_t dot = imageFilename.find_last_of('.');
+  if (dot == string::npos) {
+    return "";
+  }
+  string epochTimestampString = imageFilename.substr(dash2+1, dot-dash2-1);
+
+  int64_t pts = ptsMap[frameNum];
+
+  header << frameString << ", " << pts << ", " << epochTimestampString <<
+            ", " << imageWidth << ", " << imageHeight << endl;
+
+  return header.str();
+}
+
+// Header for the detections part of the Alarm file.
+string make_detections_header()
 {
   // Write CSV header
   string sepString = ", ";    // separator string for CSV file
@@ -996,9 +1065,7 @@ static bool parse_json_predict_response(string &responseParsed, const string &re
   const cJSON *rootStatus = NULL;
   const cJSON *outputs = NULL;
 
-  // Write CSV header
   string sepString = ", ";    // separator string for CSV file
-  responseParsed.append(make_csv_header());
 
   try {
     if (root == NULL)
@@ -1199,7 +1266,7 @@ static bool parse_json_workflow_predict_response(string &responseParsed, const s
 
   // Write CSV header
   string sepString = ", ";    // separator string for CSV file
-  responseParsed.append(make_csv_header());
+  responseParsed.append(make_detections_header());
 
   try {
     if (root == NULL)
@@ -2331,7 +2398,6 @@ static void write_metadata_from_config()
     return status;
   }
 
-
 /*
 * Read image dimensions from file. Dimensions will be used on predict response.
 * Predict on a detection model returns bounding boxes in relative coordinates (0-1).
@@ -2387,4 +2453,27 @@ static bool read_image_size_file()
     logging(e.what());
     status = false;
   }
+}
+
+/*
+* Read frame number and PTS from file. Will be written to alarm file.
+*/
+static void read_frame_pts_file_to_map()
+{
+  // read image_size.json file
+  string framePtsFilename = output_dir + "/frame_pts.txt";
+  cout << "frame pts file = " << framePtsFilename << endl;
+  std::ifstream infile(framePtsFilename.c_str(), std::ifstream::in);
+
+  int frameNumber;
+  int64_t pts;
+  cout << "READING FRAME PTS" << endl;
+  while (infile >> frameNumber >> pts) {
+    cout << frameNumber << ", " << pts << endl;
+    if (frameNumber > 0) {
+      ptsMap[frameNumber] = pts;
+    }
+  }
+
+  infile.close();
 }
