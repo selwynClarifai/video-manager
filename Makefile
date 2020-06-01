@@ -10,8 +10,9 @@ clean:
 make_video: clean
 	docker run -w /files --rm -it  -v `pwd`:/files video-manager \
 	  g++ -std=c++11 -pthread -L/opt/ffmpeg/lib -L/usr/lib/x86_64-linux-gnu \
-	  -I/opt/ffmpeg/include/ -I/usr/lib/include -I/usr/include -I/files/nlohmann/ \
-	  /files/cJSON.c /files/base64.c /files/video_manager.cpp \
+	  -I/opt/ffmpeg/include/ -I/usr/lib/include -I/usr/include  \
+	  /files/cJSON.c /files/base64.c /files/Api.cpp /files/Utils.cpp \
+	  /files/Configuration_File.cpp /files/Video_Capture.cpp /files/video_manager.cpp \
 	  -lavcodec -lavformat -lavfilter -lavdevice -lswresample -lswscale -lavutil -ljpeg -lturbojpeg -lcurl \
 	  -o /files/build/video_manager
 
