@@ -34,18 +34,26 @@ Video_Capture::Video_Capture(Configuration_File &c) :
     api.model_version = c.model_version;
     api.output_dir = c.output_dir;
     api.upload = c.upload;
+
+    pOutFormatContext = NULL;
+    pInFormatContext = NULL;
+    pPacket = NULL;
+    pCodecContext = NULL;
+    pFrame = NULL;
+    outStream = NULL;
+
+    stopDecoding = false;
 }
 
 Video_Capture::~Video_Capture()
 {
     //delete api;
+    cout << "Video_Capture::cleanup()" << endl;
     cleanup();
 }
 
-int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveVideo, bool I_frames)
+int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool saveVideo, bool I_frames)
 {
-  logging("initializing all the containers, codecs and protocols.");
-
   /*
   * initialize thread to get predictions
   */
@@ -107,8 +115,6 @@ int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveV
   {
     AVCodecParameters *pLocalCodecParameters =  NULL;
     pLocalCodecParameters = pInFormatContext->streams[i]->codecpar;
-    logging("AVStream->time_base before open coded %d/%d", pInFormatContext->streams[i]->time_base.num, pInFormatContext->streams[i]->time_base.den);
-    logging("AVStream->r_frame_rate before open coded %d/%d", pInFormatContext->streams[i]->r_frame_rate.num, pInFormatContext->streams[i]->r_frame_rate.den);
     logging("AVStream->start_time %" PRId64, pInFormatContext->streams[i]->start_time);
     logging("AVStream->duration %" PRId64, pInFormatContext->streams[i]->duration);
 
@@ -153,32 +159,8 @@ int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveV
   /*
   * Create context for video output file. This is where RTSP stream will be saved.
   */
-  pOutFormatContext = NULL;
-  AVStream *outStream = NULL;
-  if (saveVideo) {
-    /*
-    * To save RTSP, output container format should be mp4, ts, or mkv
-    * https://video.stackexchange.com/questions/28446/recording-webcam-video-ffmpeg-error
-    * 
-    * This article is better. Solves the slow frame rate problem. was getting 2.4 fps instead of 15 fps.
-    * Use .ts for accurate frame rate.
-    * https://stackoverflow.com/questions/44593241/ffmpeg-segmentation-and-inaccurate-wrong-framerate
-    */
-    chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
-    string outFilename = config.output_dir + "/video_" + 
-                std::to_string(chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count()) + ".ts";
-    pOutFormatContext = avformat_alloc_context();
-
-    int status = open_video_out_file_and_stream(pOutFormatContext, pInFormatContext, pCodecContext, 
-                                                outStream, inStream, outFilename, video_stream_index);
-    if (status == 0) {
-      logging("Succesfully opened video output file %s", outFilename.c_str());
-    } else {
-      logging("Error opening video output file %s, error = %d", outFilename.c_str(), status);
-      logging("Not saving video output");
-      saveVideo = false;
-    }
-  }
+  //pOutFormatContext = NULL;
+  //AVStream *outStream = NULL;
 
   // Fill the codec context based on the values from the supplied codec parameters
   // https://ffmpeg.org/doxygen/trunk/group__lavc__core.html#gac7b282f51540ca7a99416a3ba6ee0d16
@@ -216,7 +198,10 @@ int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveV
   // fill the Packet with data from the Stream
   // https://ffmpeg.org/doxygen/trunk/group__lavf__decoding.html#ga4fdb3084415a82e3810de6ee60e46a61
   int framesSkipped = frameInterval;
-  while (av_read_frame(pInFormatContext, pPacket) >= 0)
+  auto videoStartTime = chrono::steady_clock::now();
+
+  bool videoFileExists = false;
+  while (av_read_frame(pInFormatContext, pPacket) >= 0 || stopDecoding)
   {
     // if it's the video stream
     int ix = 0;
@@ -235,6 +220,25 @@ int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveV
 
       // Save to video output file
       if (saveVideo) {
+
+        auto videoEndTime = chrono::steady_clock::now();
+        long elapsedSeconds = chrono::duration_cast<chrono::seconds>(videoEndTime-videoStartTime).count();
+        bool start_new_video_file = false;
+        if (elapsedSeconds >= config.video_max_seconds) {
+          videoStartTime = chrono::steady_clock::now();
+          start_new_video_file = true;
+        }
+
+        if (!videoFileExists || start_new_video_file) {
+          // if cannot create video output file, stop trying to save.
+          saveVideo = new_video_out_file(pCodecContext, outStream, inStream, 
+                                        video_stream_index, videoFileExists);
+          if (!saveVideo) {
+            continue;
+          }
+          videoFileExists = true;
+        }
+
         // set pPacket->stream_index to 0 because pOutFormatContext contains only one stream - for video.
         pPacket->stream_index = 0;
         int stat = av_interleaved_write_frame(pOutFormatContext, pPacket);
@@ -249,7 +253,7 @@ int Video_Capture::decode_video(char *videoSource, int frameInterval, bool saveV
   }
 
   // release all resources
-  cleanup();
+  //cleanup();
 }
 
 void Video_Capture::cleanup()
@@ -266,7 +270,7 @@ void Video_Capture::cleanup()
   av_frame_free(&pFrame);
   avcodec_free_context(&pCodecContext);
 
-  close_video_out_file();
+  close_video_out_file_and_stream();
 
   // Write Frame number and PTS to file.
   FILE *fp = NULL;
@@ -274,7 +278,6 @@ void Video_Capture::cleanup()
   fp = fopen(outFile.c_str(), "w");
   if (fp) {
     for (auto pts : ptsMap) {
-      cout << pts.first << " " << pts.second << endl;
       stringstream line;
       line << pts.first << " " << pts.second << endl;
       fwrite(line.str().c_str(), sizeof(char), line.str().size(), fp);
@@ -360,33 +363,34 @@ int Video_Capture::decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContex
   return 0;
 }
 
-void Video_Capture::close_video_out_file()
+void Video_Capture::close_video_out_file_and_stream()
 {
   if (pOutFormatContext) {
     av_write_trailer(pOutFormatContext);
-    avio_close(pOutFormatContext->pb);
+    int status = avio_close(pOutFormatContext->pb);
+    if (status != 0) {
+      logging("Error: close_video_out_file_and_stream: cannot close video output file %s. avio_close error=%d", 
+            pOutFormatContext->filename, status);
+    }
     avformat_free_context(pOutFormatContext);
+    pOutFormatContext = NULL;
   }
 }
 
 // https://stackoverflow.com/questions/9251747/record-rtsp-stream-with-ffmpeg-libavformat
-int Video_Capture::open_video_out_file_and_stream(AVFormatContext *pOutFormatContext, AVFormatContext *pInFormatContext, 
-  AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, const string &outFilename, int video_stream_index)
+int Video_Capture::init_video_out_file_and_stream(AVCodecContext *inCodecContext, AVStream *outStream, 
+                                AVStream *inStream, const string &outFilename, int video_stream_index)
 {
   //open output file
   AVOutputFormat* fmt = av_guess_format(NULL, outFilename.c_str(), NULL);
-  //pOutFormatContext = avformat_alloc_context();
   pOutFormatContext->oformat = fmt;
   int status = avio_open2(&pOutFormatContext->pb, outFilename.c_str(), AVIO_FLAG_WRITE,NULL,NULL);
   if (status != 0) {
-    logging("Error: init_video_out_file: cannot open video output file %s. avio_open2 error=%d", 
+    logging("Error: init_video_out_file_and_stream: cannot open video output file %s. avio_open2 error=%d", 
           outFilename.c_str(), status);
   }
   // Create output stream
-  //outStream = avformat_new_stream( ofcx, (AVCodec *) inCodecContext->codec );
   outStream = avformat_new_stream(pOutFormatContext, NULL);
-  //avcodec_copy_context( outStream->codec, inCodecContext );
-  //status = avcodec_parameters_to_context(outStream->codecpar, (*pInFormatContext)->streams[video_stream_index]->codecpar);
   status = avcodec_parameters_copy(outStream->codecpar, inStream->codecpar);
 
   outStream->sample_aspect_ratio.num = inCodecContext->sample_aspect_ratio.num;
@@ -396,24 +400,54 @@ int Video_Capture::open_video_out_file_and_stream(AVFormatContext *pOutFormatCon
   outStream->r_frame_rate = inStream->r_frame_rate;
   outStream->avg_frame_rate = outStream->r_frame_rate;
   outStream->time_base = av_inv_q( outStream->r_frame_rate );
-  //outStream->codec->time_base = outStream->time_base;
   outStream->time_base = outStream->time_base;
   cout << "inCodecContext->bit_rate = " << inCodecContext->bit_rate << endl;
 
   status = avformat_write_header( pOutFormatContext, NULL );
   if (status != AVSTREAM_INIT_IN_WRITE_HEADER && 
       status != AVSTREAM_INIT_IN_INIT_OUTPUT) {
-      logging("Error: init_video_out_file: avformat_write_header error=%d", status);
+      logging("Error: init_video_out_file_and_stream: avformat_write_header error=%d", status);
       }
-
   snprintf( pOutFormatContext->filename, sizeof( pOutFormatContext->filename ), "%s", outFilename.c_str() );
 
   //start reading packets from stream and write them to file
-
   av_dump_format( pInFormatContext, 0, pInFormatContext->filename, 0 );
   av_dump_format( pOutFormatContext, 0, pOutFormatContext->filename, 1 );
 
   return status;
+}
+
+// create another video output file
+bool Video_Capture::new_video_out_file(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
+                                  int video_stream_index, bool videoFileExists)
+{
+  if (videoFileExists) {
+    close_video_out_file_and_stream();
+  }
+
+  /*
+  * To save RTSP, output container format should be mp4, ts, or mkv
+  * https://video.stackexchange.com/questions/28446/recording-webcam-video-ffmpeg-error
+  * 
+  * This article is better. Solves the slow frame rate problem. was getting 2.4 fps instead of 15 fps.
+  * Use .ts for accurate frame rate.
+  * https://stackoverflow.com/questions/44593241/ffmpeg-segmentation-and-inaccurate-wrong-framerate
+  */
+  chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
+  string outFilename = config.output_dir + "/video_" + 
+              std::to_string(chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count()) + ".ts";
+  pOutFormatContext = avformat_alloc_context();
+  int status = init_video_out_file_and_stream(pCodecContext, outStream, inStream, outFilename, video_stream_index);
+  if (status >= 0) {
+    logging("Succesfully opened video output file %s", outFilename.c_str());
+    return true;
+  } else {
+    logging("Error opening video output file %s, error = %d", outFilename.c_str(), status);
+    logging("Not saving video output");
+    return false;
+  }
+
+  return false;
 }
 
 // https://stackoverflow.com/questions/9094691/examples-or-tutorials-of-using-libjpeg-turbos-turbojpeg

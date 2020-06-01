@@ -40,15 +40,19 @@ public:
     ~Video_Capture();
 
     void cleanup();
-    void close_video_out_file();
-    int decode_video(char *videoSource, int frameInterval, bool saveVideo, bool I_frames);
+    int decode_video(const char *videoSource, int frameInterval, bool saveVideo, bool I_frames);
     // decode packets into frames
     int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, 
                             int &framesSkipped, int frameInterval, bool I_frames);
     void get_jpg_files_in_output_dir(std::vector<std::string> &jpgFiles);
-    int open_video_out_file_and_stream(AVFormatContext *pOutFormatContext, AVFormatContext *pInFormatContext, 
-                                    AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
+
+    // opening and closing video output files
+    void close_video_out_file_and_stream();
+    int init_video_out_file_and_stream(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
                                     const std::string &outFilename, int video_stream_index);
+    bool new_video_out_file(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
+                                                    int video_stream_index, bool videoFileExists);
+
     // save a frame into a .pgm file
     int write_jpeg(std::string &imageFileName, AVFrame *pFrame, int frameNumber);
     void read_frame_pts_file_to_map();
@@ -66,12 +70,14 @@ public:
     AVCodecContext *pCodecContext = NULL;
     AVFrame *pFrame = NULL;
     AVFormatContext *pOutFormatContext = NULL;
+    AVStream *outStream = NULL;
+
 
     static std::string imageToUpload;
     int imageWidth = 0;
     int imageHeight = 0;
 
-    Configuration_File &config;
+    Configuration_File config;
     static Api api;
 
     // Thread variables
@@ -79,7 +85,8 @@ public:
     std::thread predictThread;
     static bool threadRunning;
     static bool predicting;
-
+    
+    bool stopDecoding;
 };
 
 #endif // VIDEO_CAPTURE_H

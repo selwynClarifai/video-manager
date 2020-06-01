@@ -18,19 +18,21 @@ using namespace std;
 
 Configuration_File::Configuration_File()
 {
-    string base_url = "https://api.clarifai.com";
-    string api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
-    string model_id = "cb649131aa72f86911815b0fe98dee55"; // General Detection
-    string model_version = "13c11ec702854e97a695ca2a0f809a95"; // General Detection
-    int frames_to_skip = 1;
-    int jpeg_quality = 75;
-    string output_dir = "/files/images";
-    bool imageSizeWritten = false;
-    bool save_I_frames = false;
-    bool save_video_file = true;
-    bool print_debug = false;
-    bool upload = false;
-    string metadata_structure = "{ \
+    base_url = "https://api.clarifai.com";
+    api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
+    model_id = "cb649131aa72f86911815b0fe98dee55"; // General Detection
+    model_version = "13c11ec702854e97a695ca2a0f809a95"; // General Detection
+    frames_to_skip = 1;
+    jpeg_quality = 75;
+    output_dir = "/files/images";
+    imageSizeWritten = false;
+    save_I_frames = false;
+    save_video_file = true;
+    print_debug = false;
+    upload = false;
+    video_max_seconds = 3600;   // max number of seconds for video before creating new file
+
+    metadata_structure = "{ \
         \"my interesting thing 1\": \"value\", \
         \"key2\": \"value2\" \
         }";    
@@ -52,6 +54,27 @@ Configuration_File::Configuration_File()
 Configuration_File::~Configuration_File()
 {
 }
+
+// Looks for config.json in exe directory 
+bool Configuration_File::found_config_file()
+{
+  DIR *dpdf;
+  struct dirent *epdf;
+  bool found = false;
+
+  dpdf = opendir("..");
+  if (dpdf != NULL){
+    while (epdf = readdir(dpdf)){
+      if (strcmp(epdf->d_name, "config.json") == 0) {
+        found = true;
+        break;
+      }
+    }
+  }
+  closedir(dpdf);
+
+  return found;
+} 
 
 /*
 * Writes metadata_structure from config file into a separate time-stamped file.
@@ -108,6 +131,7 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;    
   cJSON *j_upload = NULL;
+  cJSON *j_video_max_seconds = NULL;
   cJSON *j_metadata_structure = NULL;
   cJSON *config = NULL;
 
@@ -204,6 +228,15 @@ bool Configuration_File::read_json_config_file()
       throw std::runtime_error("Error: could not parse save_video_file from config.json");
     }
 
+    j_video_max_seconds = cJSON_GetObjectItemCaseSensitive(config, "video_max_seconds");
+    if (cJSON_IsNumber(j_video_max_seconds))
+    {
+        video_max_seconds = j_video_max_seconds->valueint;
+        cout << "read_json_config_file: video_max_seconds = " << video_max_seconds << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse video_max_seconds from config.json");
+    }
+
     j_frames_to_skip = cJSON_GetObjectItemCaseSensitive(config, "frames_to_skip");
     if (cJSON_IsNumber(j_frames_to_skip))
     {
@@ -268,28 +301,6 @@ bool Configuration_File::read_json_config_file()
   return status;
 }
 
-// Looks for config.json in exe directory 
-bool Configuration_File::found_config_file()
-{
-  DIR *dpdf;
-  struct dirent *epdf;
-  bool found = false;
-
-  dpdf = opendir("..");
-  if (dpdf != NULL){
-    while (epdf = readdir(dpdf)){
-      if (strcmp(epdf->d_name, "config.json") == 0) {
-        found = true;
-        break;
-      }
-    }
-  }
-  closedir(dpdf);
-
-  return found;
-} 
-
-
 /*
 * JSON configuration file format
 
@@ -301,6 +312,7 @@ bool Configuration_File::found_config_file()
    "output_dir": "/my/output/dir",
    "print_debug": false,
    "save_video_file": true,
+   "video_max_seconds": 3600,
    "upload": false,
    "metadata_structure": {
       "my interesting thing 1": "value",
@@ -323,6 +335,7 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;    
   cJSON *j_upload = NULL;
+  cJSON *j_video_max_seconds = NULL;
   cJSON *j_metadata_structure = NULL;
   cJSON *config = NULL;
 
@@ -381,6 +394,13 @@ bool Configuration_File::write_json_config_file()
     }
     j_save_video_file = cJSON_CreateBool(save_video_file);
     cJSON_AddItemToObject(config, "save_video_file", j_save_video_file);
+
+    j_video_max_seconds = cJSON_CreateObject();
+    if (!j_video_max_seconds) {
+      throw std::runtime_error("Error: could not create j_video_max_seconds cJSON object");
+    }
+    j_video_max_seconds = cJSON_CreateNumber(video_max_seconds);
+    cJSON_AddItemToObject(config, "video_max_seconds", j_video_max_seconds);
 
     j_frames_to_skip = cJSON_CreateObject();
     if (!j_frames_to_skip) {

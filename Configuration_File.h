@@ -32,6 +32,7 @@ class Configuration_File {
     bool save_video_file;
     bool print_debug;
     bool upload;
+    unsigned long video_max_seconds;   // max number of seconds for video before creating new file
     std::string metadata_structure;      
     std::string authorizationHeader;
  
