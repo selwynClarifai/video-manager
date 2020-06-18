@@ -9,6 +9,7 @@
 // C++ includes
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 // Local includes
 #include "Configuration_File.h"
@@ -16,7 +17,8 @@
 
 using namespace std;
 
-Configuration_File::Configuration_File()
+Configuration_File::Configuration_File(const string &conf_file) :
+    config_filename(conf_file)
 {
     base_url = "https://api.clarifai.com";
     api_key = "4a5f25ecc48047ad8fb1d33ca687082e";
@@ -31,6 +33,10 @@ Configuration_File::Configuration_File()
     print_debug = false;
     upload = false;
     video_max_seconds = 3600;   // max number of seconds for video before creating new file
+
+    // Streams to capture / predict on
+    stream_url = "";
+    stream_name = "mwir";
 
     metadata_structure = "{ \
         \"my interesting thing 1\": \"value\", \
@@ -58,6 +64,7 @@ Configuration_File::~Configuration_File()
 // Looks for config.json in exe directory 
 bool Configuration_File::found_config_file()
 {
+  /*
   DIR *dpdf;
   struct dirent *epdf;
   bool found = false;
@@ -72,8 +79,10 @@ bool Configuration_File::found_config_file()
     }
   }
   closedir(dpdf);
+  */
 
-  return found;
+  ifstream infile(config_filename.c_str());
+  return infile.good();
 } 
 
 /*
@@ -129,16 +138,19 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_save_I_frames = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
-  cJSON *j_save_video_file = NULL;    
+  cJSON *j_save_video_file = NULL;
   cJSON *j_upload = NULL;
   cJSON *j_video_max_seconds = NULL;
   cJSON *j_metadata_structure = NULL;
+  cJSON *j_stream_url = NULL;
+  cJSON *j_stream_name = NULL;
+  cJSON *j_stream_predict = NULL;
   cJSON *config = NULL;
 
   try {
 
     // read config file
-    FILE *fp = std::fopen("../config.json", "r");
+    FILE *fp = std::fopen(config_filename.c_str(), "r");
     string contents;
     if (fp)
     {
@@ -148,7 +160,7 @@ bool Configuration_File::read_json_config_file()
       std::fread(&contents[0], 1, contents.size(), fp);
       std::fclose(fp);
     } else {
-      throw std::runtime_error("Error: could not open config.json for reading.");
+      throw std::runtime_error("Error: could not open " + config_filename + " for reading.");
     }
 
     config = cJSON_Parse(contents.c_str());
@@ -163,7 +175,7 @@ bool Configuration_File::read_json_config_file()
         base_url = j_base_url->valuestring;
         cout << "read_json_config_file: base_url = " << base_url << endl;
     } else {
-      throw std::runtime_error("Error: could not parse base_url from config.json");
+      throw std::runtime_error("Error: could not parse base_url from " + config_filename);
     }
 
     j_api_key = cJSON_GetObjectItemCaseSensitive(config, "api_key");
@@ -172,7 +184,7 @@ bool Configuration_File::read_json_config_file()
         api_key = j_api_key->valuestring;
         cout << "read_json_config_file: api_key = " << api_key << endl;
     } else {
-      throw std::runtime_error("Error: could not parse api_key from config.json");
+      throw std::runtime_error("Error: could not parse api_key from " + config_filename);
     }
 
     j_model_id = cJSON_GetObjectItemCaseSensitive(config, "model_id");
@@ -181,7 +193,7 @@ bool Configuration_File::read_json_config_file()
         model_id = j_model_id->valuestring;
         cout << "read_json_config_file: model_id = " << model_id << endl;
     } else {
-      throw std::runtime_error("Error: could not parse model_id from config.json");
+      throw std::runtime_error("Error: could not parse model_id from " + config_filename);
     }
 
     j_model_version = cJSON_GetObjectItemCaseSensitive(config, "model_version");
@@ -190,7 +202,7 @@ bool Configuration_File::read_json_config_file()
         model_version = j_model_version->valuestring;
         cout << "read_json_config_file: model_version = " << model_version << endl;
     } else {
-      throw std::runtime_error("Error: could not parse model_version from config.json");
+      throw std::runtime_error("Error: could not parse model_version from " + config_filename);
     }
 
     j_output_dir = cJSON_GetObjectItemCaseSensitive(config, "output_dir");
@@ -199,7 +211,7 @@ bool Configuration_File::read_json_config_file()
         output_dir = j_output_dir->valuestring;
         cout << "read_json_config_file: output_dir = " << output_dir << endl;
     } else {
-      throw std::runtime_error("Error: could not parse output_dir from config.json");
+      throw std::runtime_error("Error: could not parse output_dir from " + config_filename);
     }
 
     j_print_debug = cJSON_GetObjectItemCaseSensitive(config, "print_debug");
@@ -212,7 +224,7 @@ bool Configuration_File::read_json_config_file()
       }
       cout << "read_json_config_file: print_debug = " << print_debug << endl;
     } else {
-      throw std::runtime_error("Error: could not parse print_debug from config.json");
+      throw std::runtime_error("Error: could not parse print_debug from " + config_filename);
     }
 
     j_save_video_file = cJSON_GetObjectItemCaseSensitive(config, "save_video_file");
@@ -225,7 +237,7 @@ bool Configuration_File::read_json_config_file()
       }
       cout << "read_json_config_file: save_video_file = " << save_video_file << endl;
     } else {
-      throw std::runtime_error("Error: could not parse save_video_file from config.json");
+      throw std::runtime_error("Error: could not parse save_video_file from " + config_filename);
     }
 
     j_video_max_seconds = cJSON_GetObjectItemCaseSensitive(config, "video_max_seconds");
@@ -234,7 +246,7 @@ bool Configuration_File::read_json_config_file()
         video_max_seconds = j_video_max_seconds->valueint;
         cout << "read_json_config_file: video_max_seconds = " << video_max_seconds << endl;
     } else {
-      throw std::runtime_error("Error: could not parse video_max_seconds from config.json");
+      throw std::runtime_error("Error: could not parse video_max_seconds from " + config_filename);
     }
 
     j_frames_to_skip = cJSON_GetObjectItemCaseSensitive(config, "frames_to_skip");
@@ -243,7 +255,7 @@ bool Configuration_File::read_json_config_file()
         frames_to_skip = j_frames_to_skip->valueint;
         cout << "read_json_config_file: frames_to_skip = " << frames_to_skip << endl;
     } else {
-      throw std::runtime_error("Error: could not parse frames_to_skip from config.json");
+      throw std::runtime_error("Error: could not parse frames_to_skip from " + config_filename);
     }
 
     j_save_I_frames = cJSON_GetObjectItemCaseSensitive(config, "save_I_frames");
@@ -256,7 +268,7 @@ bool Configuration_File::read_json_config_file()
       }
       cout << "read_json_config_file: save_I_frames = " << save_I_frames << endl;
     } else {
-      throw std::runtime_error("Error: could not parse save_I_frames from config.json");
+      throw std::runtime_error("Error: could not parse save_I_frames from " + config_filename);
     }
 
     j_jpeg_quality = cJSON_GetObjectItemCaseSensitive(config, "jpeg_quality");
@@ -265,7 +277,7 @@ bool Configuration_File::read_json_config_file()
         jpeg_quality = j_jpeg_quality->valueint;
         cout << "read_json_config_file: jpeg_quality = " << jpeg_quality << endl;
     } else {
-      throw std::runtime_error("Error: could not parse jpeg_quality from config.json");
+      throw std::runtime_error("Error: could not parse jpeg_quality from " + config_filename);
     }
 
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
@@ -278,7 +290,38 @@ bool Configuration_File::read_json_config_file()
       }
       cout << "read_json_config_file: upload = " << upload << endl;
     } else {
-      throw std::runtime_error("Error: could not parse upload from config.json");
+      throw std::runtime_error("Error: could not parse upload from " + config_filename);
+    }
+
+    j_stream_url = cJSON_GetObjectItemCaseSensitive(config, "stream_url");
+    if (cJSON_IsString(j_stream_url) && (j_stream_url->valuestring != NULL))
+    {
+        stream_url = j_stream_url->valuestring;
+        cout << "read_json_config_file: stream_url = " << stream_url << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse stream_url from " + config_filename);
+    }
+
+    j_stream_name = cJSON_GetObjectItemCaseSensitive(config, "stream_name");
+    if (cJSON_IsString(j_stream_name) && (j_stream_name->valuestring != NULL))
+    {
+        stream_name = j_stream_name->valuestring;
+        cout << "read_json_config_file: stream_name = " << stream_name << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse stream_url from " + config_filename);
+    }
+
+    j_stream_predict = cJSON_GetObjectItemCaseSensitive(config, "stream_predict");
+    if (cJSON_IsBool(j_stream_predict))
+    {
+      if (cJSON_IsTrue(j_stream_predict)) {
+        stream_predict = true;
+      } else {
+        stream_predict = false;
+      }
+      cout << "read_json_config_file: stream_predict = " << stream_predict << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse stream_predict from " + config_filename);
     }
 
     j_metadata_structure = cJSON_GetObjectItemCaseSensitive(config, "metadata_structure");
@@ -287,7 +330,7 @@ bool Configuration_File::read_json_config_file()
         metadata_structure = j_metadata_structure->valuestring;
         cout << "read_json_config_file: metadata_structure = " << metadata_structure << endl;
     } else {
-      throw std::runtime_error("Error: could not parse metadata_structure from config.json");
+      throw std::runtime_error("Error: could not parse metadata_structure from " + config_filename);
     }
 
     char *configJson = cJSON_Print(config);
@@ -336,6 +379,9 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_save_video_file = NULL;    
   cJSON *j_upload = NULL;
   cJSON *j_video_max_seconds = NULL;
+  cJSON *j_stream_url = NULL;
+  cJSON *j_stream_name = NULL;
+  cJSON *j_stream_predict = NULL;
   cJSON *j_metadata_structure = NULL;
   cJSON *config = NULL;
 
@@ -430,6 +476,27 @@ bool Configuration_File::write_json_config_file()
     j_upload = cJSON_CreateBool(upload);
     cJSON_AddItemToObject(config, "upload", j_upload);
 
+    j_stream_url = cJSON_CreateObject();
+    if (!j_stream_url) {
+      throw std::runtime_error("Error: could not create j_stream_url cJSON object");
+    }
+    j_stream_url = cJSON_CreateString(stream_url.c_str());
+    cJSON_AddItemToObject(config, "stream_url", j_stream_url);
+
+    j_stream_name = cJSON_CreateObject();
+    if (!j_stream_name) {
+      throw std::runtime_error("Error: could not create j_stream_name cJSON object");
+    }
+    j_stream_name = cJSON_CreateString(stream_name.c_str());
+    cJSON_AddItemToObject(config, "stream_name", j_stream_name);
+
+    j_stream_predict = cJSON_CreateObject();
+    if (!j_stream_predict) {
+      throw std::runtime_error("Error: could not create j_stream_predict cJSON object");
+    }
+    j_stream_predict = cJSON_CreateBool(stream_predict);
+    cJSON_AddItemToObject(config, "stream_predict", j_stream_predict);
+
     j_metadata_structure = cJSON_CreateObject();
     if (!j_metadata_structure) {
       throw std::runtime_error("Error: could not create j_metadata_structure cJSON object");
@@ -443,7 +510,7 @@ bool Configuration_File::write_json_config_file()
     }
 
     // Write configuration file.
-    FILE *fp = fopen("../config.json", "w");
+    FILE *fp = fopen(config_filename.c_str(), "w");
     fwrite(configJson, sizeof(char), strlen(configJson), fp);
     fclose(fp);
     free(configJson);

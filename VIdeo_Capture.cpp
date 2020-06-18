@@ -18,31 +18,39 @@ using namespace std;
 std::map<int, int64_t> ptsMap;  // record PTS values during decode. Add to Alarm files in postprocessing.
 
 // declare static variables
-Api Video_Capture::api;
-std::mutex Video_Capture::predictMutex;
+mutex Video_Capture::predictMutex;
 bool Video_Capture::threadRunning;
+thread Video_Capture::predictThread;
 bool Video_Capture::predicting;
 string Video_Capture::imageToUpload;
+Api Video_Capture::api;
 
-Video_Capture::Video_Capture(Configuration_File &c) :
-    config(c)
+
+Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType ct) :
+  config(c)
 {
-    api.authorizationHeader = c.authorizationHeader;
-    api.print_debug = c.print_debug;
-    api.base_url = c.base_url;
-    api.model_id = c.model_id;
-    api.model_version = c.model_version;
-    api.output_dir = c.output_dir;
-    api.upload = c.upload;
+  //config = c;
+  captureType = ct;
 
-    pOutFormatContext = NULL;
-    pInFormatContext = NULL;
-    pPacket = NULL;
-    pCodecContext = NULL;
-    pFrame = NULL;
-    outStream = NULL;
+  api.authorizationHeader = c.authorizationHeader;
+  api.print_debug = c.print_debug;
+  api.base_url = c.base_url;
+  api.model_id = c.model_id;
+  api.model_version = c.model_version;
+  api.output_dir = c.output_dir;
+  api.upload = c.upload;
 
-    stopDecoding = false;
+  pOutFormatContext = NULL;
+  pInFormatContext = NULL;
+  pPacket = NULL;
+  pCodecContext = NULL;
+  pFrame = NULL;
+  outStream = NULL;
+
+  imageWidth = 0;
+  imageHeight = 0;
+
+  stopDecoding = false;
 }
 
 Video_Capture::~Video_Capture()
@@ -52,12 +60,18 @@ Video_Capture::~Video_Capture()
     cleanup();
 }
 
-int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool saveVideo, bool I_frames)
+int Video_Capture::decode_video()
 {
+  string videoSource;
+  videoSource = config.stream_url;
+  bool saveVideo = config.save_video_file;
+
   /*
   * initialize thread to get predictions
   */
-  predictThread = thread(run_predict);
+  if (captureType == CAPTURE_PREDICT) {
+    predictThread = thread(run_predict);
+  }
 
   // AVFormatContext holds the header information from the format (Container)
   // Allocating memory for this component
@@ -68,7 +82,7 @@ int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool
     return -1;
   }
 
-  logging("opening the input file (%s) and loading format (container) header", videoSource);
+  logging("opening the input file (%s) and loading format (container) header", videoSource.c_str());
   // Open the file and read its header. The codecs are not opened.
   // The function arguments are:
   // AVFormatContext (the component we allocated memory for),
@@ -76,8 +90,8 @@ int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool
   // AVInputFormat (if you pass NULL it'll do the auto detect)
   // and AVDictionary (which are options to the demuxer)
   // http://ffmpeg.org/doxygen/trunk/group__lavf__decoding.html#ga31d601155e9035d5b0e7efedc894ee49
-  if (avformat_open_input(&pInFormatContext, videoSource, NULL, NULL) != 0) {
-    logging("ERROR could not open the file");
+  if (avformat_open_input(&pInFormatContext, videoSource.c_str(), NULL, NULL) != 0) {
+    logging("ERROR could not open the file %s", videoSource.c_str());
     return -1;
   }
 
@@ -197,7 +211,7 @@ int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool
   //int how_many_packets_to_process = 120;
   // fill the Packet with data from the Stream
   // https://ffmpeg.org/doxygen/trunk/group__lavf__decoding.html#ga4fdb3084415a82e3810de6ee60e46a61
-  int framesSkipped = frameInterval;
+  int framesSkipped = config.frames_to_skip;
   auto videoStartTime = chrono::steady_clock::now();
 
   bool videoFileExists = false;
@@ -210,17 +224,18 @@ int Video_Capture::decode_video(const char *videoSource, int frameInterval, bool
         logging("AVPacket->pts %" PRId64, pPacket->pts);
       }
 
-      response = decode_packet(pPacket, pCodecContext, pFrame, framesSkipped, frameInterval, I_frames);
+      response = decode_packet(pPacket, pCodecContext, pFrame, framesSkipped, config.frames_to_skip, config.save_I_frames);
       if (response < 0) {
         break;
       }
 
       // record PTS of this video frame. Will be used to write Alarm files in postprocessing.
-      ptsMap[pCodecContext->frame_number] = pPacket->pts;
+      if (captureType == CAPTURE_PREDICT) {
+        ptsMap[pCodecContext->frame_number] = pPacket->pts;
+      }
 
       // Save to video output file
       if (saveVideo) {
-
         auto videoEndTime = chrono::steady_clock::now();
         long elapsedSeconds = chrono::duration_cast<chrono::seconds>(videoEndTime-videoStartTime).count();
         bool start_new_video_file = false;
@@ -261,8 +276,10 @@ void Video_Capture::cleanup()
   logging("releasing all the resources");
 
   // Stop thread BEFORE libav resources
-  threadRunning = false;
-  predictThread.join();
+  if (captureType == CAPTURE_PREDICT) {
+    threadRunning = false;
+    predictThread.join();
+  }
 
   // release libav resources
   avformat_close_input(&pInFormatContext);
@@ -273,16 +290,18 @@ void Video_Capture::cleanup()
   close_video_out_file_and_stream();
 
   // Write Frame number and PTS to file.
-  FILE *fp = NULL;
-  string outFile = config.output_dir + "/frame_pts.txt";
-  fp = fopen(outFile.c_str(), "w");
-  if (fp) {
-    for (auto pts : ptsMap) {
-      stringstream line;
-      line << pts.first << " " << pts.second << endl;
-      fwrite(line.str().c_str(), sizeof(char), line.str().size(), fp);
+  if (captureType == CAPTURE_PREDICT) {
+    FILE *fp = NULL;
+    string outFile = config.output_dir + "/frame_pts.txt";
+    fp = fopen(outFile.c_str(), "w");
+    if (fp) {
+      for (auto pts : ptsMap) {
+        stringstream line;
+        line << pts.first << " " << pts.second << endl;
+        fwrite(line.str().c_str(), sizeof(char), line.str().size(), fp);
+      }
+      fclose(fp);
     }
-    fclose(fp);
   }
 }
 
@@ -313,7 +332,7 @@ int Video_Capture::decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContex
       return response;
     }
 
-    if (response >= 0) {
+    if (response >= 0 && captureType == CAPTURE_PREDICT) {
       // print every 250th frame
       if (config.print_debug || pCodecContext->frame_number % 250 == 0) {
         logging(
@@ -339,7 +358,7 @@ int Video_Capture::decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContex
 
       char frame_filename[1024];
       snprintf(frame_filename, sizeof(frame_filename), "%s-%d.pgm", "frame", pCodecContext->frame_number);
-      //if (pFrame->pict_type == AV_PICTURE_TYPE_I) {
+
       if (I_frames && pFrame->pict_type == AV_PICTURE_TYPE_I ||
           !I_frames && framesSkipped == frameInterval) {
         framesSkipped = 1;
@@ -434,7 +453,10 @@ bool Video_Capture::new_video_out_file(AVCodecContext *inCodecContext, AVStream 
   * https://stackoverflow.com/questions/44593241/ffmpeg-segmentation-and-inaccurate-wrong-framerate
   */
   chrono::milliseconds msSinceEpoch = millisecs_since_epoch();
-  string outFilename = config.output_dir + "/video_" + 
+  string outPrefix;
+  outPrefix = config.stream_name;
+
+  string outFilename = config.output_dir + "/" + outPrefix + "_" + 
               std::to_string(chrono::duration_cast<std::chrono::milliseconds>(msSinceEpoch).count()) + ".ts";
   pOutFormatContext = avformat_alloc_context();
   int status = init_video_out_file_and_stream(pCodecContext, outStream, inStream, outFilename, video_stream_index);

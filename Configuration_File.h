@@ -13,13 +13,19 @@ extern "C" {
 // Configuration file functions
 class Configuration_File {
     public:
-    Configuration_File();
+    Configuration_File(const std::string &conf_file);
     ~Configuration_File();
     bool write_json_config_file();
     bool read_json_config_file();
     bool found_config_file();
     void write_metadata_from_config();
 
+    std::string authorizationHeader;
+
+    // Configuration file name
+    std::string config_filename;
+
+    // Configuration file parameters
     std::string base_url;
     std::string api_key;
     std::string model_id;
@@ -34,8 +40,11 @@ class Configuration_File {
     bool upload;
     unsigned long video_max_seconds;   // max number of seconds for video before creating new file
     std::string metadata_structure;      
-    std::string authorizationHeader;
  
+    // Streams to be recorded
+    std::string stream_url;   // URL of stream to capture and predict on
+    std::string stream_name;  // Name of stream to capture and predict on (output file prefix)
+    bool stream_predict;      // set to true to do predicts on stream
 };
 
 #endif // CONFIGURATION_FILE_H

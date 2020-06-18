@@ -1,53 +1,46 @@
-#include "video_manager.h"
+#include "video_manager_no_predict.h"
 
 using namespace std;
 
 // Global static video_manager, that can be called 
 // from signal_callback_handler
-video_manager vm;
+video_manager_no_predict vm;
 
-video_manager::video_manager()
+video_manager_no_predict::video_manager_no_predict()
 {
-  pVideoCapPredict = NULL;
+  pVideoCap = NULL;
 }
 
-video_manager::~video_manager()
+video_manager_no_predict::~video_manager_no_predict()
 {
   cleanup_video_capture();
 }
 
-void video_manager::set_configuration_filename(const std::string conf_file)
+void video_manager_no_predict::set_configuration_filename(const std::string conf_file)
 {
   configuration_filename = conf_file;
 }
 
-void video_manager::cleanup_video_capture()
+void video_manager_no_predict::cleanup_video_capture()
 {
-  if (pVideoCapPredict) {
-    pVideoCapPredict->stopDecoding = true;
-    cout << "deleting pVideoCapPredict" << endl;
-    delete pVideoCapPredict;
-    pVideoCapPredict = NULL;
+  if (pVideoCap) {
+    pVideoCap->stopDecoding = true;
+    cout << "deleting pVideoCap" << endl;
+    delete pVideoCap;
+    pVideoCap = NULL;
   }
 }
 
-int video_manager::run()
+int video_manager_no_predict::run()
 {
   Configuration_File config(configuration_filename);
 
   // the video source to capture and predict on
-  pVideoCapPredict = new Video_Capture(config, Video_Capture::CAPTURE_PREDICT);
-  cout << "video capture and predict" << endl;
+  pVideoCap = new Video_Capture(config, Video_Capture::CAPTURE);
+  cout << "video capture only" << endl;
 
   int status = 0;
-  if (config.upload) {
-    cout << "UPLOADING AND PREDICTING" << endl;
-    pVideoCapPredict->read_image_size_file();
-    pVideoCapPredict->read_frame_pts_file_to_map();
-    pVideoCapPredict->run_upload_and_predict();
-  } else {
-    status = pVideoCapPredict->decode_video();
-  }
+  status = pVideoCap->decode_video();
 
   return status;
 }
@@ -68,7 +61,7 @@ int main(int argc, char *argv[])
     return -1;
   }
   printf("Configuration file = %s\n", argv[1]);
-  
+
   // Register signal and signal handler for ctrl-c
   signal(SIGINT, signal_callback_handler);
 

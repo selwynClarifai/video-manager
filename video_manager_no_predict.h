@@ -1,5 +1,5 @@
-#ifndef VIDEO_MANAGER_H
-#define VIDEO_MANAGER_H
+#ifndef VIDEO_MANAGER_NO_PREDICT_H
+#define VIDEO_MANAGER_NO_PREDICT_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,12 +16,12 @@
 
 // Local includes
 #include "Video_Capture.h"
-//#include "Configuration_File.h"
+#include "Configuration_File.h"
 
-class video_manager {
+class video_manager_no_predict {
     public:
-    video_manager();
-    ~video_manager();
+    video_manager_no_predict();
+    ~video_manager_no_predict();
     int run();
     void set_configuration_filename(const std::string conf_file);
     void cleanup_video_capture();
@@ -30,7 +30,7 @@ class video_manager {
     std::string configuration_filename;
 
     // the video source to capture and predict on
-    Video_Capture *pVideoCapPredict;
+    Video_Capture *pVideoCap;
 };
 
-#endif  // VIDEO_MANAGER_H
+#endif  //VIDEO_MANAGER_NO_PREDICT_H

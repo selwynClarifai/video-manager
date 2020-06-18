@@ -32,61 +32,67 @@ extern "C" {
 
 // Local includes
 #include "Api.h"
-#include "Configuration_File.h"
+//#include "Configuration_File.h"
 
 class Video_Capture {
 public:
-    Video_Capture(Configuration_File &c);
-    ~Video_Capture();
 
-    void cleanup();
-    int decode_video(const char *videoSource, int frameInterval, bool saveVideo, bool I_frames);
-    // decode packets into frames
-    int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, 
-                            int &framesSkipped, int frameInterval, bool I_frames);
-    void get_jpg_files_in_output_dir(std::vector<std::string> &jpgFiles);
+  // indicates whether to capture and predict, or capture only.
+  enum CaptureType {CAPTURE_PREDICT, CAPTURE};
 
-    // opening and closing video output files
-    void close_video_out_file_and_stream();
-    int init_video_out_file_and_stream(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
-                                    const std::string &outFilename, int video_stream_index);
-    bool new_video_out_file(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
-                                                    int video_stream_index, bool videoFileExists);
+  Video_Capture(Configuration_File &c, Video_Capture::CaptureType ct);
+  ~Video_Capture();
 
-    // save a frame into a .pgm file
-    int write_jpeg(std::string &imageFileName, AVFrame *pFrame, int frameNumber);
-    void read_frame_pts_file_to_map();
+  void cleanup();
+  int decode_video();
+  // decode packets into frames
+  int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, 
+                          int &framesSkipped, int frameInterval, bool I_frames);
+  void get_jpg_files_in_output_dir(std::vector<std::string> &jpgFiles);
 
-    // uploading and predicting on images
-    static void run_predict();
-    void run_upload_and_predict();
+  // opening and closing video output files
+  void close_video_out_file_and_stream();
+  int init_video_out_file_and_stream(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
+                                  const std::string &outFilename, int video_stream_index);
+  bool new_video_out_file(AVCodecContext *inCodecContext, AVStream *outStream, AVStream *inStream, 
+                                                  int video_stream_index, bool videoFileExists);
 
-    // image_size_file.json
-    bool read_image_size_file();
-    bool write_image_size_file(int width, int height);
+  // save a frame into a .pgm file
+  int write_jpeg(std::string &imageFileName, AVFrame *pFrame, int frameNumber);
+  void read_frame_pts_file_to_map();
 
-    AVFormatContext *pInFormatContext = NULL;
-    AVPacket *pPacket = NULL;
-    AVCodecContext *pCodecContext = NULL;
-    AVFrame *pFrame = NULL;
-    AVFormatContext *pOutFormatContext = NULL;
-    AVStream *outStream = NULL;
+  // uploading and predicting on images
+  static void run_predict();
+  void run_upload_and_predict();
 
+  // image_size_file.json
+  bool read_image_size_file();
+  bool write_image_size_file(int width, int height);
 
-    static std::string imageToUpload;
-    int imageWidth = 0;
-    int imageHeight = 0;
+  AVFormatContext *pInFormatContext;
+  AVPacket *pPacket;
+  AVCodecContext *pCodecContext;
+  AVFrame *pFrame;
+  AVFormatContext *pOutFormatContext;
+  AVStream *outStream;
 
-    Configuration_File config;
-    static Api api;
+  CaptureType captureType;
+  std::string streamName;   // name of stream / camera which will be prefix for output file name
 
-    // Thread variables
-    static std::mutex predictMutex;
-    std::thread predictThread;
-    static bool threadRunning;
-    static bool predicting;
-    
-    bool stopDecoding;
+  static std::string imageToUpload;
+  int imageWidth;
+  int imageHeight;
+
+  Configuration_File &config;
+  static Api api;
+
+  // Thread variables
+  static std::mutex predictMutex;
+  static std::thread predictThread;
+  static bool threadRunning;
+  static bool predicting;
+  
+  bool stopDecoding;
 };
 
 #endif // VIDEO_CAPTURE_H

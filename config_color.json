@@ -1,0 +1,18 @@
+{
+	"base_url":	"https://api.clarifai.com",
+	"api_key":	"4a5f25ecc48047ad8fb1d33ca687082e",
+	"model_id":	"cb649131aa72f86911815b0fe98dee55",
+	"model_version":	"13c11ec702854e97a695ca2a0f809a95",
+	"output_dir":	"/files/images",
+	"print_debug":	false,
+	"save_video_file":	true,
+	"video_max_seconds":	3600,
+	"frames_to_skip":	1,
+	"save_I_frames":	false,
+	"jpeg_quality":	75,
+	"upload":	false,
+	"stream_url":	"rtsp://freja.hiof.no:1935/rtplive/definst/hessdalen03.stream",
+	"stream_name":	"color",
+	"stream_predict":	false,
+	"metadata_structure":	"{         \"my interesting thing 1\": \"value\",         \"key2\": \"value2\"         }"
+}

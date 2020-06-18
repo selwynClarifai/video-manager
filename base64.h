@@ -24,9 +24,9 @@ static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
 static char *decoding_table = NULL;
 static int mod_table[] = {0, 2, 1};
 
-void build_decoding_table();
+static void build_decoding_table();
 
-char *base64_encode(const unsigned char *data, size_t input_length, size_t *output_length);
+static char *base64_encode(const unsigned char *data, size_t input_length, size_t *output_length);
 
 #ifdef __cplusplus
 }
