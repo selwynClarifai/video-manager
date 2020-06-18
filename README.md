@@ -8,11 +8,15 @@ docker build -t video-manager .
 # The executables will be in /files/build
 docker run -it --network host -v `pwd`:/files video-manager bash
 
-There are 2 executables: 
+# There are 2 executables: 
 video_manager - capture video and run predicts
 video_manager_no_predict - capture video with no predicts
 
-To record 2 cameras simultaneously:
+# To make the executables
+make make_video
+make make_video_no_predict
+
+# To record 2 cameras simultaneously:
  ./video_manager ../config_mwir.json ; ./video_manager_no_predict ../config_color.json
  
 # RTSP test websites
