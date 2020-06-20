@@ -21,15 +21,20 @@ std::map<int, int64_t> ptsMap;  // record PTS values during decode. Add to Alarm
 mutex Video_Capture::predictMutex;
 bool Video_Capture::threadRunning;
 thread Video_Capture::predictThread;
-bool Video_Capture::predicting;
+bool Video_Capture::predicting = false;
 string Video_Capture::imageToUpload;
 Api Video_Capture::api;
-
+sem_t Video_Capture::semDecode;  // semaphore to allow decode to run
+sem_t Video_Capture::semPredict;  // semaphore to allow predict to run
+bool Video_Capture::upload = false;
+string Video_Capture::output_dir;
+queue<std::string> Video_Capture::imageQueue;
 
 Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType ct) :
   config(c)
 {
-  //config = c;
+  upload = config.upload;
+  output_dir = config.output_dir;
   captureType = ct;
 
   api.authorizationHeader = c.authorizationHeader;
@@ -51,6 +56,9 @@ Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType c
   imageHeight = 0;
 
   stopDecoding = false;
+  sem_init(&semPredict, 0, 0);
+  sem_init(&semDecode, 0, 1);
+
 }
 
 Video_Capture::~Video_Capture()
@@ -63,8 +71,13 @@ Video_Capture::~Video_Capture()
 int Video_Capture::decode_video()
 {
   string videoSource;
-  videoSource = config.stream_url;
   bool saveVideo = config.save_video_file;
+  if (upload) {
+    videoSource = config.upload_file;
+    saveVideo = false;
+  } else {
+    videoSource = config.stream_url;
+  }
 
   /*
   * initialize thread to get predictions
@@ -267,6 +280,7 @@ int Video_Capture::decode_video()
     av_packet_unref(pPacket);
   }
 
+  logging("Finished decoding");
   // release all resources
   //cleanup();
 }
@@ -362,24 +376,36 @@ int Video_Capture::decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContex
       if (I_frames && pFrame->pict_type == AV_PICTURE_TYPE_I ||
           !I_frames && framesSkipped == frameInterval) {
         framesSkipped = 1;
-        string imageFilename;
-        write_jpeg(imageFilename, pFrame, pCodecContext->frame_number);
 
-        // Send image(s) to portal
-        //send_image_to_portal(imageFilename);
-       // Trigger run_upload
-        if (predictMutex.try_lock()) {
+        // Send image(s) to portal for predict
+        if (upload) {
+          // send one image at a time for predict
+          sem_wait(&semDecode);
+          write_jpeg_for_predict(pFrame, pCodecContext->frame_number);
           predicting = true;
-          imageToUpload = imageFilename;
-          predictMutex.unlock();
+          sem_post(&semPredict);
+        } else {
+          // lock will be obtained for a time slice long enough to decode several frames
+          if (predictMutex.try_lock()) {
+            write_jpeg_for_predict(pFrame, pCodecContext->frame_number);
+            predicting = true;
+            predictMutex.unlock();
+          }
         }
-
       } else {
         framesSkipped++;
       }
     }
   }
   return 0;
+}
+
+void Video_Capture::write_jpeg_for_predict(AVFrame *pFrame, int frame_number)
+{
+  string imageFilename;
+  write_jpeg(imageFilename, pFrame, pCodecContext->frame_number);
+  imageToUpload = imageFilename;
+  imageQueue.push(imageToUpload);
 }
 
 void Video_Capture::close_video_out_file_and_stream()
@@ -682,32 +708,39 @@ void Video_Capture::read_frame_pts_file_to_map()
 
 void Video_Capture::run_predict()
 {
-  const auto wait_duration = std::chrono::milliseconds(10);
+  const auto wait_duration = std::chrono::milliseconds(5);
   threadRunning = true;
-  predicting = false;
-
-  bool _predicting = false;
-  string _imageToUpload;
 
   while (threadRunning) {
-    std::this_thread::sleep_for(wait_duration);
-
-    predictMutex.lock();
-      _predicting = predicting;
-      _imageToUpload = imageToUpload;
+    if (predicting) {
       predicting = false;
-    predictMutex.unlock();
-
-    if (_predicting) {
-      api.predict_on_image(_imageToUpload, "");
+      if (upload) {
+        sem_wait(&semPredict);
+        api.predict_on_image(imageToUpload, "");
+        remove_jpg_files();
+        imageQueue.push(imageToUpload);
+        sem_post(&semDecode);
+      } else {
+        predictMutex.lock();
+        if (!imageToUpload.empty()) {
+          api.predict_on_image(imageToUpload, "");
+          remove_jpg_files();
+          imageQueue.push(imageToUpload);
+        }
+        predictMutex.unlock();
+      }
+    } else {
+      std::this_thread::sleep_for(wait_duration);
     }
+          //}
+    //predictMutex.unlock();
   }
 }
 
 void Video_Capture::run_upload_and_predict()
 {
   const auto wait_duration = std::chrono::milliseconds(10);
-  bool _predicting = false;
+  //bool _predicting = false;
   string _imageToUpload;
 
   vector<string> jpgFiles;
@@ -762,4 +795,14 @@ void Video_Capture::get_jpg_files_in_output_dir(std::vector<string> &jpgFiles)
   }
   closedir(dpdf);
 
-} // GetFilesInDirectory
+} 
+
+void Video_Capture::remove_jpg_files()
+{
+  // Don't remove images too quickly. Predict request needs time. 
+  // Always leave a couple in queue.
+  while (imageQueue.size() >= 2) {
+    remove(imageQueue.front().c_str());
+    imageQueue.pop();
+  }
+} 

@@ -44,10 +44,8 @@ int video_manager::run()
     cout << "UPLOADING AND PREDICTING" << endl;
     pVideoCapPredict->read_image_size_file();
     pVideoCapPredict->read_frame_pts_file_to_map();
-    pVideoCapPredict->run_upload_and_predict();
-  } else {
-    status = pVideoCapPredict->decode_video();
   }
+  status = pVideoCapPredict->decode_video();
 
   return status;
 }

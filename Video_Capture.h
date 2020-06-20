@@ -26,9 +26,11 @@ extern "C" {
 
 // C++ includes
 #include <map>
+#include <queue>
 #include <string>
 #include <thread>
 #include <mutex>
+#include <semaphore.h>
 
 // Local includes
 #include "Api.h"
@@ -48,7 +50,10 @@ public:
   // decode packets into frames
   int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFrame *pFrame, 
                           int &framesSkipped, int frameInterval, bool I_frames);
+
+  // handling jpg files
   void get_jpg_files_in_output_dir(std::vector<std::string> &jpgFiles);
+  static void remove_jpg_files();
 
   // opening and closing video output files
   void close_video_out_file_and_stream();
@@ -59,6 +64,7 @@ public:
 
   // save a frame into a .pgm file
   int write_jpeg(std::string &imageFileName, AVFrame *pFrame, int frameNumber);
+  void write_jpeg_for_predict(AVFrame *pFrame, int frame_number);
   void read_frame_pts_file_to_map();
 
   // uploading and predicting on images
@@ -80,18 +86,23 @@ public:
   std::string streamName;   // name of stream / camera which will be prefix for output file name
 
   static std::string imageToUpload;
+  static std::queue<std::string> imageQueue;
   int imageWidth;
   int imageHeight;
 
   Configuration_File &config;
   static Api api;
+  static bool upload;
+  static std::string output_dir;
 
   // Thread variables
   static std::mutex predictMutex;
   static std::thread predictThread;
   static bool threadRunning;
   static bool predicting;
-  
+  static sem_t semDecode;  // semaphore to allow decode to run
+  static sem_t semPredict;  // semaphore to allow predict to run
+
   bool stopDecoding;
 };
 
