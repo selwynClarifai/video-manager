@@ -1152,7 +1152,7 @@ void Api::encode_jpeg_to_base64(cJSON **base64_string, const char *jpeg_file_nam
   file = fopen(jpeg_file_name , "rb");
   if (!file) {
     {
-      fprintf(stderr, "Unable to open file %s", jpeg_file_name);
+      fprintf(stderr, "Unable to open file %s\n", jpeg_file_name);
       return;
     }
   }
