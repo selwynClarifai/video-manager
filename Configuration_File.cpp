@@ -44,8 +44,6 @@ Configuration_File::Configuration_File(const string &conf_file) :
         \"key2\": \"value2\" \
         }";    
 
-    authorizationHeader = "Authorization: Key " + api_key;
-
   // Configuration file
   if (!found_config_file()) {
     cout << "configuration file not found. Writing a default one." << endl;
@@ -54,6 +52,8 @@ Configuration_File::Configuration_File(const string &conf_file) :
     cout << "configuration file found. Reading..." << endl;
     read_json_config_file();
   }
+
+  authorizationHeader = "Authorization: Key " + api_key;
 
   write_metadata_from_config();
 }
