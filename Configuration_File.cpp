@@ -32,6 +32,7 @@ Configuration_File::Configuration_File(const string &conf_file) :
     save_video_file = true;
     print_debug = false;
     upload = false;
+    upload_file = "";
     video_max_seconds = 3600;   // max number of seconds for video before creating new file
 
     // Streams to capture / predict on
@@ -64,23 +65,6 @@ Configuration_File::~Configuration_File()
 // Looks for config.json in exe directory 
 bool Configuration_File::found_config_file()
 {
-  /*
-  DIR *dpdf;
-  struct dirent *epdf;
-  bool found = false;
-
-  dpdf = opendir("..");
-  if (dpdf != NULL){
-    while (epdf = readdir(dpdf)){
-      if (strcmp(epdf->d_name, "config.json") == 0) {
-        found = true;
-        break;
-      }
-    }
-  }
-  closedir(dpdf);
-  */
-
   ifstream infile(config_filename.c_str());
   return infile.good();
 } 
@@ -140,6 +124,7 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;
   cJSON *j_upload = NULL;
+  cJSON *j_upload_file = NULL;
   cJSON *j_video_max_seconds = NULL;
   cJSON *j_metadata_structure = NULL;
   cJSON *j_stream_url = NULL;
@@ -293,6 +278,15 @@ bool Configuration_File::read_json_config_file()
       throw std::runtime_error("Error: could not parse upload from " + config_filename);
     }
 
+    j_upload_file = cJSON_GetObjectItemCaseSensitive(config, "upload_file");
+    if (cJSON_IsString(j_upload_file) && (j_upload_file->valuestring != NULL))
+    {
+        upload_file = j_upload_file->valuestring;
+        cout << "read_json_config_file: upload_file = " << upload_file << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse upload_file from " + config_filename);
+    }
+
     j_stream_url = cJSON_GetObjectItemCaseSensitive(config, "stream_url");
     if (cJSON_IsString(j_stream_url) && (j_stream_url->valuestring != NULL))
     {
@@ -378,6 +372,7 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;    
   cJSON *j_upload = NULL;
+  cJSON *j_upload_file = NULL;
   cJSON *j_video_max_seconds = NULL;
   cJSON *j_stream_url = NULL;
   cJSON *j_stream_name = NULL;
@@ -475,6 +470,13 @@ bool Configuration_File::write_json_config_file()
     }
     j_upload = cJSON_CreateBool(upload);
     cJSON_AddItemToObject(config, "upload", j_upload);
+
+    j_upload_file = cJSON_CreateObject();
+    if (!j_upload_file) {
+      throw std::runtime_error("Error: could not create j_upload_file cJSON object");
+    }
+    j_upload_file = cJSON_CreateString(upload_file.c_str());
+    cJSON_AddItemToObject(config, "upload_file", j_upload_file);
 
     j_stream_url = cJSON_CreateObject();
     if (!j_stream_url) {
