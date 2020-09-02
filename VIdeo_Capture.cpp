@@ -28,11 +28,13 @@ sem_t Video_Capture::semDecode;  // semaphore to allow decode to run
 sem_t Video_Capture::semPredict;  // semaphore to allow predict to run
 bool Video_Capture::upload = false;
 string Video_Capture::output_dir;
+bool Video_Capture::save_jpeg = false;
 queue<std::string> Video_Capture::imageQueue;
 
 Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType ct) :
   config(c)
 {
+  save_jpeg = config.save_jpeg;
   upload = config.upload;
   output_dir = config.output_dir;
   captureType = ct;
@@ -717,14 +719,18 @@ void Video_Capture::run_predict()
       if (upload) {
         sem_wait(&semPredict);
         api.predict_on_image(imageToUpload, "");
-        remove_jpg_files();
+        if (!save_jpeg) {
+          remove_jpg_files();
+        }
         imageQueue.push(imageToUpload);
         sem_post(&semDecode);
       } else {
         predictMutex.lock();
         if (!imageToUpload.empty()) {
           api.predict_on_image(imageToUpload, "");
-          remove_jpg_files();
+          if (!save_jpeg) {
+            remove_jpg_files();
+          }
           imageQueue.push(imageToUpload);
         }
         predictMutex.unlock();

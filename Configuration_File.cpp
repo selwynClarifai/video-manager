@@ -28,6 +28,7 @@ Configuration_File::Configuration_File(const string &conf_file) :
     jpeg_quality = 75;
     output_dir = "/files/images";
     imageSizeWritten = false;
+    save_jpeg = true;
     save_I_frames = false;
     save_video_file = true;
     print_debug = false;
@@ -120,6 +121,7 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
   cJSON *j_save_I_frames = NULL;
+  cJSON *j_save_jpeg = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;
@@ -265,6 +267,19 @@ bool Configuration_File::read_json_config_file()
       throw std::runtime_error("Error: could not parse jpeg_quality from " + config_filename);
     }
 
+    j_save_jpeg = cJSON_GetObjectItemCaseSensitive(config, "save_jpeg");
+    if (cJSON_IsBool(j_save_jpeg))
+    {
+      if (cJSON_IsTrue(j_save_jpeg)) {
+        save_jpeg = true;
+      } else {
+        save_jpeg = false;
+      }
+      cout << "read_json_config_file: save_jpeg = " << save_jpeg << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse save_jpeg from " + config_filename);
+    }
+
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
     if (cJSON_IsBool(j_upload))
     {
@@ -368,6 +383,7 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_frames_to_skip = NULL;
   cJSON *j_jpeg_quality = NULL;
   cJSON *j_save_I_frames = NULL;
+  cJSON *j_save_jpeg = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;    
@@ -463,6 +479,13 @@ bool Configuration_File::write_json_config_file()
     }
     j_jpeg_quality = cJSON_CreateNumber(jpeg_quality);
     cJSON_AddItemToObject(config, "jpeg_quality", j_jpeg_quality);
+
+    j_save_jpeg = cJSON_CreateObject();
+    if (!j_save_jpeg) {
+      throw std::runtime_error("Error: could not create j_save_jpeg cJSON object");
+    }
+    j_save_jpeg = cJSON_CreateBool(save_jpeg);
+    cJSON_AddItemToObject(config, "save_jpeg", j_save_jpeg);
 
     j_upload = cJSON_CreateObject();
     if (!j_upload) {

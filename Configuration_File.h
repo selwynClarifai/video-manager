@@ -35,6 +35,7 @@ class Configuration_File {
     std::string output_dir;
     bool imageSizeWritten;
     bool save_I_frames;
+    bool save_jpeg;
     bool save_video_file;
     bool print_debug;
     bool upload;

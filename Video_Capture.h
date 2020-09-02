@@ -93,6 +93,7 @@ public:
   Configuration_File &config;
   static Api api;
   static bool upload;
+  static bool save_jpeg;
   static std::string output_dir;
 
   // Thread variables

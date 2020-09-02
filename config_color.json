@@ -10,6 +10,7 @@
 	"frames_to_skip":	1,
 	"save_I_frames":	false,
 	"jpeg_quality":	75,
+	"save_jpeg":	false,
 	"upload":	false,
 	"upload_file":	"",
 	"stream_url":	"rtsp://freja.hiof.no:1935/rtplive/definst/hessdalen03.stream",
