@@ -1,7 +1,7 @@
 /*
  * http://ffmpeg.org/doxygen/trunk/index.html
  *
- * Main components
+ * Main components:
  *
  * Format (Container) - a wrapper, providing sync, metadata and muxing for the streams.
  * Stream - a continuous stream (audio or video) of data over time.
