@@ -34,6 +34,7 @@ extern "C" {
 
 // Local includes
 #include "Api.h"
+#include "AIP_Client.h"
 //#include "Configuration_File.h"
 
 class Video_Capture {
@@ -91,6 +92,8 @@ public:
   int imageHeight;
 
   Configuration_File &config;
+  static AIP_Client aip_client;
+  static bool aip_proto;
   static Api api;
   static bool upload;
   static bool save_jpeg;

@@ -23,6 +23,7 @@ bool Video_Capture::threadRunning;
 thread Video_Capture::predictThread;
 bool Video_Capture::predicting = false;
 string Video_Capture::imageToUpload;
+AIP_Client Video_Capture::aip_client;
 Api Video_Capture::api;
 sem_t Video_Capture::semDecode;  // semaphore to allow decode to run
 sem_t Video_Capture::semPredict;  // semaphore to allow predict to run
@@ -35,6 +36,7 @@ Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType c
   config(c)
 {
   save_jpeg = config.save_jpeg;
+  aip_proto = config.aip_proto;
   upload = config.upload;
   output_dir = config.output_dir;
   captureType = ct;
@@ -569,61 +571,61 @@ int Video_Capture::write_jpeg(string &imageFileName, AVFrame *pFrame, int frameN
 */
 bool Video_Capture::write_image_size_file(int width, int height)
 {
-if (width <= 0) {
-    logging("write_image_size_file: Error: image width = %d", width);
-    return false;
-}
-if (height <= 0) {
-    logging("write_image_size_file: Error: image height = %d", height);
-    return false;
-}
+  if (width <= 0) {
+      logging("write_image_size_file: Error: image width = %d", width);
+      return false;
+  }
+  if (height <= 0) {
+      logging("write_image_size_file: Error: image height = %d", height);
+      return false;
+  }
 
-imageWidth = width;
-imageHeight = height;
+  imageWidth = width;
+  imageHeight = height;
 
-api.imageWidth = imageWidth;
-api.imageHeight = imageHeight;
+  api.imageWidth = imageWidth;
+  api.imageHeight = imageHeight;
 
-string imageSizeFilename = config.output_dir + "/image_size.json";
-FILE *fp = fopen(imageSizeFilename.c_str(), "w");
+  string imageSizeFilename = config.output_dir + "/image_size.json";
+  FILE *fp = fopen(imageSizeFilename.c_str(), "w");
 
-if (!fp) {
-    return false;
-}
+  if (!fp) {
+      return false;
+  }
 
-bool status = true;
-cJSON *j_root = NULL;
-cJSON *j_width = NULL;
-cJSON *j_height = NULL;
-try {
-    j_root = cJSON_CreateObject();
-    if (!j_root) {
-    throw std::runtime_error("write_image_size_file: Error: could not create j_root cJSON object");
-    }
+  bool status = true;
+  cJSON *j_root = NULL;
+  cJSON *j_width = NULL;
+  cJSON *j_height = NULL;
+  try {
+      j_root = cJSON_CreateObject();
+      if (!j_root) {
+      throw std::runtime_error("write_image_size_file: Error: could not create j_root cJSON object");
+      }
 
-    j_width = cJSON_CreateObject();
-    if (!j_width) {
-    throw std::runtime_error("write_image_size_file: Error: could not create j_width cJSON object");
-    }
-    j_width = cJSON_CreateNumber(width);
-    cJSON_AddItemToObject(j_root, "image_width", j_width);
+      j_width = cJSON_CreateObject();
+      if (!j_width) {
+      throw std::runtime_error("write_image_size_file: Error: could not create j_width cJSON object");
+      }
+      j_width = cJSON_CreateNumber(width);
+      cJSON_AddItemToObject(j_root, "image_width", j_width);
 
-    j_height = cJSON_CreateObject();
-    if (!j_height) {
-    throw std::runtime_error("write_image_size_file: Error: could not create j_height cJSON object");
-    }
-    j_height = cJSON_CreateNumber(height);
-    cJSON_AddItemToObject(j_root, "image_height", j_height);
-} catch (const std::exception &e) {
-    logging(e.what());
-    status = false;
-}
+      j_height = cJSON_CreateObject();
+      if (!j_height) {
+      throw std::runtime_error("write_image_size_file: Error: could not create j_height cJSON object");
+      }
+      j_height = cJSON_CreateNumber(height);
+      cJSON_AddItemToObject(j_root, "image_height", j_height);
+  } catch (const std::exception &e) {
+      logging(e.what());
+      status = false;
+  }
 
-char *imageSizeJson = cJSON_Print(j_root);
-fwrite(imageSizeJson, sizeof(char), strlen(imageSizeJson), fp);
-fclose(fp);
-free(imageSizeJson);
-return status;
+  char *imageSizeJson = cJSON_Print(j_root);
+  fwrite(imageSizeJson, sizeof(char), strlen(imageSizeJson), fp);
+  fclose(fp);
+  free(imageSizeJson);
+  return status;
 }
 
 /*
@@ -718,7 +720,11 @@ void Video_Capture::run_predict()
       predicting = false;
       if (upload) {
         sem_wait(&semPredict);
-        api.predict_on_image(imageToUpload, "");
+        if (aip_proto) {
+          aip_client.infer(imageToUpload, api.imageWidth, api.imageHeight);
+        } else {
+          api.predict_on_image(imageToUpload, "");
+        }
         if (!save_jpeg) {
           remove_jpg_files();
         }
@@ -727,7 +733,11 @@ void Video_Capture::run_predict()
       } else {
         predictMutex.lock();
         if (!imageToUpload.empty()) {
-          api.predict_on_image(imageToUpload, "");
+          if (aip_proto) {
+            aip_client.infer(imageToUpload, api.imageWidth, api.imageHeight);
+          } else {
+            api.predict_on_image(imageToUpload, "");
+          }
           if (!save_jpeg) {
             remove_jpg_files();
           }

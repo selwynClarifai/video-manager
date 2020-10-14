@@ -11,6 +11,7 @@
 	"save_I_frames":	false,
 	"jpeg_quality":	75,
 	"save_jpeg":	false,
+	"aip_proto":	false,
 	"upload":	false,
 	"upload_file":	"",
 	"stream_url":	"rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mov",

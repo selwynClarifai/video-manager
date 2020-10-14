@@ -33,6 +33,7 @@ class Configuration_File {
     int frames_to_skip;
     int jpeg_quality;
     std::string output_dir;
+    bool aip_proto;
     bool imageSizeWritten;
     bool save_I_frames;
     bool save_jpeg;

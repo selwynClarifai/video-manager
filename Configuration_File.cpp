@@ -27,6 +27,7 @@ Configuration_File::Configuration_File(const string &conf_file) :
     frames_to_skip = 1;
     jpeg_quality = 75;
     output_dir = "/files/images";
+    aip_proto = false;    // use AIP proto instead of REST calls?
     imageSizeWritten = false;
     save_jpeg = true;
     save_I_frames = false;
@@ -122,6 +123,7 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_jpeg_quality = NULL;
   cJSON *j_save_I_frames = NULL;
   cJSON *j_save_jpeg = NULL;
+  cJSON *j_aip_proto = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;
@@ -280,6 +282,19 @@ bool Configuration_File::read_json_config_file()
       throw std::runtime_error("Error: could not parse save_jpeg from " + config_filename);
     }
 
+    j_aip_proto = cJSON_GetObjectItemCaseSensitive(config, "aip_proto");
+    if (cJSON_IsBool(j_aip_proto))
+    {
+      if (cJSON_IsTrue(j_aip_proto)) {
+        aip_proto = true;
+      } else {
+        aip_proto = false;
+      }
+      cout << "read_json_config_file: aip_proto = " << aip_proto << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse aip_proto from " + config_filename);
+    }
+
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
     if (cJSON_IsBool(j_upload))
     {
@@ -386,7 +401,8 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_save_jpeg = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
-  cJSON *j_save_video_file = NULL;    
+  cJSON *j_save_video_file = NULL;
+  cJSON *j_aip_proto = NULL;
   cJSON *j_upload = NULL;
   cJSON *j_upload_file = NULL;
   cJSON *j_video_max_seconds = NULL;
@@ -486,6 +502,13 @@ bool Configuration_File::write_json_config_file()
     }
     j_save_jpeg = cJSON_CreateBool(save_jpeg);
     cJSON_AddItemToObject(config, "save_jpeg", j_save_jpeg);
+
+    j_aip_proto = cJSON_CreateObject();
+    if (!j_aip_proto) {
+      throw std::runtime_error("Error: could not create j_aip_proto cJSON object");
+    }
+    j_aip_proto = cJSON_CreateBool(aip_proto);
+    cJSON_AddItemToObject(config, "aip_proto", j_aip_proto);
 
     j_upload = cJSON_CreateObject();
     if (!j_upload) {
