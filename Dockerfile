@@ -5,8 +5,7 @@
 # Strongly based on https://hub.docker.com/r/jrottenberg/ffmpeg/
 #
 #
-FROM        ubuntu:16.04 AS base
-
+FROM        ubuntu:16.04
 WORKDIR     /tmp/workdir
 
 RUN     apt-get -yqq update && \
@@ -14,8 +13,6 @@ RUN     apt-get -yqq update && \
                 libjpeg-dev libturbojpeg libcurl4-openssl-dev git gnutls-bin && \
         apt-get autoremove -y && \
         apt-get clean -y
-
-FROM base as build
 
 ARG        PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig
 ARG        LD_LIBRARY_PATH=/opt/ffmpeg/lib
@@ -355,8 +352,7 @@ RUN  \
         make qt-faststart && \
         cp qt-faststart ${PREFIX}/bin
 
-FROM        base AS release
-ENV         LD_LIBRARY_PATH /opt/ffmpeg/lib:/usr/local/lib
+ENV     LD_LIBRARY_PATH /opt/ffmpeg/lib:/usr/local/lib
 RUN     apt-get -yqq update && \
         apt-get install -yq --no-install-recommends build-essential && \
         apt-get autoremove -y && \
@@ -371,4 +367,4 @@ RUN git clone -b v1.32.x https://github.com/grpc/grpc && \
         cmake ../.. && \
         make
 
-COPY --from=build /opt/ffmpeg /opt/ffmpeg
+#COPY --from=build /opt/ffmpeg /opt/ffmpeg
