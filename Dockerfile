@@ -359,7 +359,8 @@ RUN     apt-get -yqq update && \
         apt-get clean -y
 
 # Install and build GRPC
-RUN git clone -b v1.32.x https://github.com/grpc/grpc && \
+WORKDIR /usr/local
+RUN git clone --branch v1.32.0 https://github.com/grpc/grpc && \
         cd grpc && \
         git submodule update --init && \
         mkdir -p cmake/build && \
