@@ -28,6 +28,7 @@ Configuration_File::Configuration_File(const string &conf_file) :
     jpeg_quality = 75;
     output_dir = "/files/images";
     aip_proto = false;    // use AIP proto instead of REST calls?
+    server_port = 30031;  // GRPC server port
     imageSizeWritten = false;
     save_jpeg = true;
     save_I_frames = false;
@@ -124,6 +125,7 @@ bool Configuration_File::read_json_config_file()
   cJSON *j_save_I_frames = NULL;
   cJSON *j_save_jpeg = NULL;
   cJSON *j_aip_proto = NULL;
+  cJSON *j_server_port = NULL;
   cJSON *j_output_dir = NULL;
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;
@@ -295,6 +297,15 @@ bool Configuration_File::read_json_config_file()
       throw std::runtime_error("Error: could not parse aip_proto from " + config_filename);
     }
 
+    j_server_port = cJSON_GetObjectItemCaseSensitive(config, "server_port");
+    if (cJSON_IsNumber(j_server_port))
+    {
+        server_port = j_server_port->valueint;
+        cout << "read_json_config_file: server_port = " << server_port << endl;
+    } else {
+      throw std::runtime_error("Error: could not parse server_port from " + config_filename);
+    }
+
     j_upload = cJSON_GetObjectItemCaseSensitive(config, "upload");
     if (cJSON_IsBool(j_upload))
     {
@@ -403,6 +414,7 @@ bool Configuration_File::write_json_config_file()
   cJSON *j_print_debug = NULL;
   cJSON *j_save_video_file = NULL;
   cJSON *j_aip_proto = NULL;
+  cJSON *j_server_port = NULL;
   cJSON *j_upload = NULL;
   cJSON *j_upload_file = NULL;
   cJSON *j_video_max_seconds = NULL;
@@ -509,6 +521,13 @@ bool Configuration_File::write_json_config_file()
     }
     j_aip_proto = cJSON_CreateBool(aip_proto);
     cJSON_AddItemToObject(config, "aip_proto", j_aip_proto);
+
+    j_server_port = cJSON_CreateObject();
+    if (!j_server_port) {
+      throw std::runtime_error("Error: could not create j_server_port cJSON object");
+    }
+    j_server_port = cJSON_CreateNumber(server_port);
+    cJSON_AddItemToObject(config, "server_port", j_server_port);
 
     j_upload = cJSON_CreateObject();
     if (!j_upload) {
