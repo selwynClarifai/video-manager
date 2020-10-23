@@ -354,7 +354,7 @@ RUN  \
 
 ENV     LD_LIBRARY_PATH /opt/ffmpeg/lib:/usr/local/lib
 RUN     apt-get -yqq update && \
-        apt-get install -yq --no-install-recommends build-essential && \
+        apt-get install -yq --no-install-recommends build-essential vim && \
         apt-get autoremove -y && \
         apt-get clean -y
 
