@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+import "proto/utils/ndarray.proto";
+import "proto/utils/tag.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+
+message Caption {
+
+  // Deprecated (10/05/16)
+  NDArray tokenized_caption = 1;
+  // Deprecated (10/31/16)
+  repeated Tag tag = 2;
+  // Deprecated (05/18/17)
+  repeated string raw_caption = 3;
+
+  string text = 4;
+
+}

@@ -1,0 +1,35 @@
+syntax = "proto3";
+option go_package = "utils";
+option java_package = "utils";
+
+import "proto/utils/data_provider.proto";
+
+message PastingDataProviderParams {
+  string background_dataset = 1;
+  DataProviderParams background_dpp = 2;
+  repeated PastingLevelParams level_dpp = 3;
+  string output_dataset = 4;
+  repeated MiniBatchItemStage mbitem_stage = 5; // to apply after pastingn steps
+  ProcessingParams processing_params = 6; // values here will be propagated to all sub generators
+  string background_dataset_split = 7;
+  bool random_layer_order = 8; // whether to shuffle order of layers before pasting
+  bool constrain_boxes_to_visible = 9; // whether to set bboxes to only visible portion of each product
+}
+
+message PastingLevelParams {
+  DataProviderParams common_dpp = 1; // parameters for transformation before pasting
+  string dataset_name = 2; // dataset to pull images from
+  float min_x = 3; // min x value for top left corner, range [0,1]
+  float max_x = 4; // max x value for top left corner, range [0,1]
+  float min_y = 5; // min y value for top left corner, range [0,1]
+  float max_y = 6; // max y value for top left corner, range [0,1]
+  float paste_prob = 7; // probability that we paste something from this level on a given image
+  bool write_bbox = 8; // whether or not to draw a bbox around this pasted item
+  float min_visible = 9; // sets a tolerance for the fraction of this level that must be visible. range [0,1]
+  float max_visible = 10; // sets a tolerance for the fraction of this level that must be occluded. range [0,1]
+  int32 repetitions = 11; // number of times to paste something from this dp.
+  string dataset_split = 12; // split of dataset to pull images from
+  string pasting_method = 13; // specify which pasting method to use
+  float skip_prob = 14; // probability for skipping this fg pasting level
+}
+

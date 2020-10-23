@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+option go_package = "media_processor";
+
+// ImageOutputFormat specifies the post-processing output of the image
+message ImageOutputFormat {
+  // id of the data example
+  string example_id = 1;
+  // width to resize the image to
+  uint32 width = 2;
+  // height to resize the image to
+  uint32 height = 3;
+  // crop percentages for [top left bottom right]
+  repeated float crop = 4;
+  // flip the image horizontally
+  bool flip_horizontal = 5;
+  // flip the image vertically
+  bool flip_vertical = 6;
+  // quality of the image [0-100]
+  uint32 quality = 7;
+  // compress the image (png only)
+  uint32 compression = 8;
+  // convert image to format specified
+  ImageOutputType type = 9;
+  // convert image using specified transform, specifying this will ignore all other options above
+  ImageTransform transform = 10;
+  // overlay images on top of a single image
+  repeated WatermarkOverlayImage overlays = 11;
+  // op type tells the handler what op the user is trying to do and handler will call accordingly
+  ImageOpType op_type = 12;
+}
+
+message MultipleImageOutputFormat {
+  // id of the data example
+  string example_id = 1;
+  repeated ImageOutputFormat output_formats = 2;
+}
+
+enum ImageOpType {
+  RESIZE = 0;
+  FLIP = 1;
+  COMPRESS = 2;
+  CONVERT = 3;
+  WATERMARK = 4;
+  CROP = 5;
+}
+
+enum ImageOutputType {
+  // leave input format unchanged
+  UNDEFINED = 0;
+  JPEG = 1;
+  PNG = 2;
+  TIFF = 3;
+  RGB24 = 4;
+  RGB24_NDARRAY = 5;
+}
+
+message ImageTransform {
+  enum ImageTransformType {
+    // leave input format unchanged
+    UNDEFINED = 0;
+    SORTA1 = 1;
+    SORTA2 = 2;
+    SORTAPAD1 = 3;
+    CENTER1 = 4;
+    SLIDE1 = 5;
+  }
+  // convert image using specified transform, specifying this will ignore all other options above
+  ImageTransformType type = 1;
+  ImageTransformOptions options = 2;
+}
+
+message ImageTransformOptions {
+  uint32 min_size = 1;
+  uint32 crop_size = 2;
+  uint32 downsample_size = 3;
+  uint32 crop_size_pixel_stride = 4;
+  bool hardcoded_sorta_crop_sizes = 5;
+  bool ratio_based_filter = 6;
+  // convert image to format specified
+  ImageOutputType type = 7;
+}
+
+// WatermarkOverlayImage overlays an image on top of the base image. 
+// The left and top arguments should be in percentages of the entire image. Range 0-1. 
+// EG: left:0.5, top:0.5 would be the middle of the image. 
+message WatermarkOverlayImage {
+  bytes image = 1;
+  float left = 2;
+  float top = 3;
+}
+
+message ImageOutputFormats {
+  repeated ImageOutputFormat output_formats = 1;
+}
+
+// VideoOutputFormat specifies the post-processing output format of the video
+message VideoOutputFormat {
+  uint32 width_px = 1;
+  uint32 height_px = 2;
+
+  // how many frames to process per second, can be [0, video_fps]
+  float seconds_between_frames = 3;
+}
+
+message VideoOutputFormats {
+  repeated VideoOutputFormats output_formats = 1;
+}

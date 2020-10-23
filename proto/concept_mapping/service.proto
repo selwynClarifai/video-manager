@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "proto/clarifai/api/resources.proto";
+import "proto/utils/request_meta.proto";
+
+option go_package = "concept_mapping";
+option java_package = "concept_mapping";
+
+// Interface exported by the server.
+service ConceptMappingService {
+  // Maps the given concepts
+  rpc MapConcepts (ConceptMappingRequest) returns (ConceptMappingResponse) {}
+}
+
+message ConceptMappingRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // The customer app id
+  string app_id = 2;
+  // The ids of the concepts to map
+  repeated string concept_ids = 3;
+  // The knowledge graph to run the concept mapping with respect to 
+  clarifai.api.KnowledgeGraph knowledge_graph = 4;
+}
+
+message ConceptMappingResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+}

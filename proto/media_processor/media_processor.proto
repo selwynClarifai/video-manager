@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+import "proto/media_processor/media.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+
+option go_package = "media_processor";
+
+service MediaProcessor {
+  // MediaProcessorProcessImage processes image examples and returns encoded image bytes streamed
+  rpc MediaProcessorProcessImage (MediaProcessorProcessImageRequest) returns (stream MediaProcessorProcessImageResponse) {}
+
+  // MediaProcessorProcessImageSunc processes image examples and returns encoded image bytes all at once
+  rpc MediaProcessorProcessImageSync (MediaProcessorProcessImageRequest) returns (MediaProcessorProcessImageResponse) {}
+
+  // MediaProcessorProcessVideo processes video examples and returns encoded video bytes
+  rpc MediaProcessorProcessVideo (MediaProcessorProcessVideoRequest) returns (MediaProcessorProcessVideoResponse) {}
+
+  // MediaProcessorGetVideoThumbnail returns video thumbnail as decoded bytes.
+  rpc MediaProcessorGetVideoThumbnail (MediaProcessorProcessVideoRequest) returns (MediaProcessorProcessVideoResponse) {}
+
+  // MediaProcessorGetState returns the state of the service
+  rpc MediaProcessorGetState (MediaProcessorGetStateRequest) returns (MediaProcessorGetStateResponse) {}
+}
+
+// MediaProcessorProcessImageRequest sends a process image request to the media processor
+message MediaProcessorProcessImageRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // contains list of data_examples to process
+  DataBatch data = 2;
+  // a map of data_example ids to the desired image output formats
+  map<string, ImageOutputFormats> output_formats = 3;
+  map<string, MultipleImageOutputFormat> multi_output_formats = 4;
+}
+
+// MediaProcessorProcessImageResponse streams back intermediate processed databatches back to the client
+message MediaProcessorProcessImageResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // processed images as encoded bytes in the data example
+  map<string, DataBatch> results = 2;
+}
+
+message MediaProcessorProcessVideoRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // contains list of data_examples to process
+  DataBatch data = 2;
+  // a map of data_example ids to the desired video output formats
+  map<string, VideoOutputFormats> output_formats = 3;
+}
+
+message MediaProcessorProcessVideoResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // processed videos as encoded bytes in the data example
+  DataBatch results = 2;
+}
+
+message MediaProcessorGetStateRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message MediaProcessorGetStateResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // State string
+  string state = 2;
+}

@@ -1,0 +1,177 @@
+syntax = "proto3";
+
+import "proto/utils/audio.proto";
+import "proto/utils/bbox.proto";
+import "proto/utils/boundingbox.proto";
+import "proto/utils/blur_result.proto";
+import "proto/utils/caption.proto";
+import "proto/utils/color_result.proto";
+import "proto/utils/embedding.proto";
+import "proto/utils/face.proto";
+import "proto/utils/geo.proto";
+import "proto/utils/image.proto";
+import "proto/utils/lopq_code.proto";
+import "proto/utils/point.proto";
+import "proto/utils/request_meta.proto";
+import "proto/utils/saved_output.proto";
+import "proto/utils/tag.proto";
+import "proto/utils/text.proto";
+import "proto/utils/video.proto";
+import "proto/clarifai/api/utils/extensions.proto";
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+extend google.protobuf.FieldOptions {
+  bool heavy = 50002;
+}
+
+message DataExample {
+  // An ID for the data example.
+  string id = 1 [(heavy) = false];
+
+  // Here we add a response status object so that we can re-use DataExample's throughout our
+  // codebase as the standard interchange in/out format. Since some inputs can fail to process, we
+  // have this status to return from different components.
+  ResponseStatus status = 999 [(heavy) = false];
+
+  // heavy data fields. Loop through to check if each field is empty or not.
+  // Can use a custom tag “heavy” to denote fields we’d split when saving.
+  Image image = 2 [(heavy) = true];
+  Video video = 3 [(heavy) = true];
+  //Audio audio = 4 [(heavy)=true];
+  // Map from layer name to SavedOutput data.
+  map<string, SavedOutput> saved_output = 5 [(heavy) = true];
+
+  repeated Embedding embedding = 6 [(heavy) = true];
+
+  // single channel png image with each pixel labelled by class number
+  // which also indexes into a palette color table for display
+  Image image_segment = 7 [(heavy) = true];
+
+  // light metadata
+  repeated Tag tag = 1000 [(heavy) = false];
+
+  repeated BoundingBox bbox = 1002 [(heavy) = false];
+
+  // Any serialized json data.
+  string json_metadata = 1003 [(heavy) = false, deprecated = true];
+
+  // repeated Gender gender = 1004 [(heavy)=false];
+
+  Geo geo = 1005 [(heavy) = false];
+
+  // repeated Age age = 1006 [(heavy)=false];
+
+  // caption may be repeated as we may have multiple captions per image
+  repeated Caption caption = 1007 [(heavy) = false];
+
+  repeated Region region = 1008 [(heavy) = false];
+  repeated Face face = 1009 [(heavy) = false];
+
+  // For returning results from lopq service.
+  repeated LOPQCode lopq_code = 1010 [(heavy) = false];
+
+  // For returning results from blur service.
+  BlurResult blur_result = 1011 [(heavy) = false];
+
+  // For returning results from color (models) service.
+  ColorResult color_result = 1012 [(heavy) = false];
+
+  // This is used for video to be a slice of the video.
+  repeated TimeFrame frame = 1013 [(heavy) = false];
+
+  // Text as input to a model.
+  // This was only used temporarily when adding text support but all those uses
+  // have been cleaned up and deprecated so commenting out the field completely.
+  // string text_old = 1014 [(heavy)=true];
+
+  // Text as input to a model.
+  Text text = 1015 [(heavy) = true];
+
+  // To handle arbitrary json metadata we use a struct field:
+  // https://github.com/google/protobuf/blob/master/src/google/protobuf/struct.proto
+  google.protobuf.Struct metadata = 1016 [(heavy) = false];
+
+  // Audio as input to a model.
+  Audio audio = 1017 [(heavy) = true];
+
+  // A customer facing ID in case one is provided
+  string cfid = 1100 [(heavy) = false];
+
+  // An optional hash for this data example
+  string hash = 1101 [(heavy) = false];
+
+  // ID of the asset tied to this data example
+  string asset_id = 1102 [(heavy) = false];
+
+  // Customer facing ID of the asset tied to this data example
+  // To not be mistaken with DataExample.Cfid
+  // This is the id customer has given to the underlying asset
+  string asset_cfid = 1103 [(heavy) = false];
+
+  // Arbitrary information about the annotation - annotation sets it belongs to, etc.
+  google.protobuf.Struct annotation_info = 1104 [(heavy) = false];
+  
+  // Marks which dataset this data example comes from
+  string dataset_name = 1105 [(heavy) = false];
+}
+
+// This region proto is defined here because it's recursively using the data_example proto
+// Currently cannot find a way to recursively define the proto in separate files
+// So everything that is recursively used end up in one proto file
+message Region {
+  // unique id
+  string id = 1 [(heavy) = false];
+
+  // Here we have the region info indicating the "where". This Bbox
+  // proto does not have the
+  message RegionInfo {
+    BBox bounding_box = 1;
+    // use bytes for a quick fix so that DB Serializer can serialize this data example.
+    bytes mask = 2;
+
+    // For storing a landmark point.
+    Point point = 3 [(heavy) = false];
+
+    // Explains the coord system of the coords in the bounding_box or point fields.
+    // If 0 (the default) then they are in the global coordinate system of the image at the root of
+    // the DataExample hierarchy.  This is the usual case.
+    // If 1 then they are relative to the parent's RegionInfo.
+    int32 relative_to = 4;
+  }
+
+  // The region information.
+  RegionInfo region_info = 11;
+
+  // This is a recursive definition which can contain all the Tags,
+  // Embeddings, etc. that are computed within this region.
+  DataExample data = 12;
+}
+
+// This frame proto is define here because it's recursively using the
+// data_example proto.
+message TimeFrame {
+  // unique id
+  string id = 1 [(heavy) = false];
+
+  // Here we have the region info indicating the "where". This Bbox
+  // proto does not have the
+  message FrameInfo {
+    int32 num = 1 [(clarifai.api.utils.cl_show_if_empty) = true];
+
+    google.protobuf.Timestamp time = 2;
+  }
+
+  // The frame information.
+  FrameInfo frame_info = 11;
+
+  // This is a recursive definition which can contain all the Tags,
+  // Embeddings, etc. that are computed within this frame. That frame
+  // can then have multiple regions and so on.
+  DataExample data = 12;
+}

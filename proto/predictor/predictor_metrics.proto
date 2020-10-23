@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+
+option go_package = "predictor";
+
+message LabelFreq {
+  string aiid = 1;
+  int32 count = 2;
+}
+
+message PositiveLabelDistribution {
+  repeated LabelFreq label_freqs = 1;
+}
+
+message CooccurrenceMatrixEntry {
+  string row = 1;
+  string col = 2;
+  int32 count = 3;
+}
+
+message CooccurrenceMatrix {
+  repeated CooccurrenceMatrixEntry matrix = 1;
+  repeated string aiid_order = 2;
+}
+
+message ConfusionMatrixEntry {
+  string pred_aiid = 1;
+  string true_aiid = 2;
+  float value = 3;
+}
+
+message ConfusionMatrix {
+  repeated ConfusionMatrixEntry matrix = 1;
+  repeated string aiid_order = 2;
+}
+
+message ROC {
+  repeated float fpr = 1 [packed = true];
+  repeated float tpr = 2 [packed = true];
+  repeated float thresholds = 3 [packed = true];
+  repeated float fpr_per_image = 4 [packed = true];
+  repeated float fpr_per_object = 5 [packed = true];
+}
+
+message PrecisionRecallCurve {
+  repeated float recall = 1 [packed = true];
+  repeated float precision = 2 [packed = true];
+  repeated float thresholds = 3 [packed = true];
+}
+
+message BinaryMetrics {
+  int32 num_pos = 1;
+  int32 num_neg = 2;
+  int32 num_examples = 3;
+  float roc_auc = 4;
+  float f1 = 5;
+  float matthews_corrcoef = 6;
+  float brier_score = 7;
+  ROC roc_curve = 8;
+  string aiid = 9;
+  float precision = 10; // at 0.5 threshold (internal use)
+  float recall = 11; // at 0.5 threshold (internal use)
+  PrecisionRecallCurve precision_recall_curve = 12;
+  float avg_precision = 13;
+  string area_range_name = 14;
+  double area_min = 15;
+  double area_max = 16;
+  float iou = 17;
+}
+
+message MulticlassMetrics {
+  float top1 = 1 [deprecated = true];
+  float top5 = 2 [deprecated = true];
+  float macro_avg_roc_auc = 3;
+  float macro_std_roc_auc = 4;
+  float macro_avg_f1 = 5;
+  float macro_std_f1 = 6;
+  int32 num_classes = 7;
+  ConfusionMatrix confusion_matrix = 8;
+  bool tested_on_outside_negatives = 9;
+  repeated BinaryMetrics binary_metrics = 10;
+  // Each DataExample will have at most one Region, that holds the bounding box and the Concepts for that region
+  DataBatch test_ground_truth = 11;
+  DataBatch test_predictions = 12;
+  CooccurrenceMatrix cooccurrence_matrix = 13;
+  PositiveLabelDistribution positive_label_distribution = 14;
+  float training_time = 15; //internal use
+  float macro_avg_precision = 16;
+  float macro_avg_recall = 17;
+  float k_fold_train_and_apply_time = 18; //internal use
+  float num_examples = 19;
+  float metrics_assembly_time = 20; //internal use
+  float mean_average_precision_iou_50 = 21;
+  float mean_average_precision_iou_range = 22;
+  repeated BinaryMetrics metrics_by_class = 23; // Used for detection evals.
+  repeated BinaryMetrics metrics_by_area = 24; // Used for detection evals
+}
+
+// used in proto/predictor/predictor.proto
+message MulticlassMetricsResponse {
+  ResponseStatus status = 1;
+  MulticlassMetrics result = 2;
+}
+
+// ProgressStatus reports the status of a training or eval job
+message ProgressStatus {
+  // percentage of training completed (e.g., number of epochs completed)
+  uint32 percent_completed = 1;
+  // estimated time remaining (s) of the training job
+  uint32 time_remaining = 2;
+  // number of inputs in the model version
+  uint32 total_input_count = 3;
+  // concept counts for the training model
+  map<string, uint32> concept_counts = 4;
+  // intermediate training metrics. cumulative over the full training run.
+  repeated TrainStats train_stats = 5;
+}
+
+// Stats to return during training
+message TrainStats {
+  // current epoch
+  uint32 epoch = 1;
+  // current global step
+  uint32 global_step = 2;
+  // current cost
+  float cost = 3;
+}

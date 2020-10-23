@@ -1,0 +1,37 @@
+/*
+ * Protocol buffer for packed or quantized embeddings.
+ */
+
+syntax = "proto3";
+
+import "proto/utils/bbox.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Embedding {
+  enum Encoding {
+    INVALID = 0;
+    FLOATS = 1;
+    QUANTIZED_MINMAX = 2;
+  }
+
+  Encoding encoding = 1;
+  uint32 ndim = 2;
+  float norm = 3;
+
+  repeated float float_array = 4 [packed = true];
+
+  float min = 5;
+  float max = 6;
+  uint32 nbits = 7;
+  bytes byte_array = 8;
+  // The model used to create the embedding.
+  string model = 9;
+
+  // The coords of the region over which the embedding was computed.  This may be the same or different than
+  // our parent Region's bbox.  For example in face detection, the parent Region may be a rectangle
+  // produced by the face detector.  But we may compute the embedding over a different crop (e.g. a square
+  // centered on the parent Region).  This field lets us store that.
+  BBox embed_box = 10;
+}

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package jsonpb;
+
+option java_multiple_files = true;
+option java_package = "com.clarifai.utils.jsonpb";
+
+message BoolFloatTestMessage {
+  uint32 uint_32 = 4;
+  uint64 uint_64 = 5;
+  int32 int_32 = 6;
+  int64 int_64 = 7;
+  float f_32 = 8;
+  double f_64 = 9;
+  bool b = 10;
+}

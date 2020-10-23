@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "proto/utils/request_meta.proto";
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message W3C {
+  string hex = 1;
+  string name = 2;
+}
+
+message Color {
+  string raw_hex = 1;
+  W3C w3c = 22;
+  float density = 3 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+message ColorResult {
+  ResponseStatus status = 1;
+  repeated Color colors = 2;
+}

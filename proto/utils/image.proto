@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+import "proto/utils/ndarray.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Image {
+  // Optional name for the image.
+  string name = 1;
+  // Data can come in one of three forms.
+  oneof data {
+    // Encoded bytes of the array (JPEG, PNG, etc.).
+    bytes encoded_bytes = 2;
+    // Stored as ndarray array already decompressed.
+    NDArray ndarray = 3;
+    // Decoded bytes of the array (raw RGB24)
+    bytes decoded_bytes = 5;
+  }
+  // Url of image before downloaded.
+  string url = 4;
+
+  // Urls of hosted versions of the image
+  string hosted_orig_url = 6;
+  string hosted_small_url = 7;
+  string hosted_large_url = 8;
+  string hosted_tiny_url = 9;
+
+  // optional width arg.
+  int32 width = 1000;
+  // optional height arg.
+  int32 height = 1001;
+  // optional number of color plans in Image.
+  int32 colors = 1002;
+
+  // fields for zero-meaned or min..max float encodings as uint8
+  float mean_value = 1003;
+  float min_value = 1004;
+  float max_value = 1005;
+}

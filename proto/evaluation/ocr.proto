@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+option go_package = "evaluation";
+
+// OCR eval result proto
+message OCREvalResult {
+  double levenshtein = 1;
+}

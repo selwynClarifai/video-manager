@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "concept_trainer_dump";
+
+message ConceptTrainerDump {
+  // Version number for keeping track of ConceptTrainer updates.
+  int32 version = 1;
+
+  // The time the ConceptTrainer was dumped.
+  google.protobuf.Timestamp update_time = 2;
+
+  // Map from concept_id to ConceptClassifierDump
+  map<string, ConceptClassifierDump> classifiers = 3;
+
+  // The spire_conf name of the embedding model used. Example, 110034_sorta2
+  string embeddings_model = 4;
+
+  // The type of outputs this concept trainer has. ONE_VS_N is softmax and M_VS_N is logreg.
+  TrainingType training_type = 5;
+
+  // If True then normalize the features before train() or predict().
+  bool feature_normalization = 6;
+
+  //////////////////////////////////
+  // For tensorflow
+  //////////////////////////////////
+  // Serialized tensorflow checkpoint proto into here so that we don't have to compile this proto
+  // with all of the tensorflow codebase.
+  // Deprecated (10/31/16) - with v3 of the proto, we use the frozen meta graph def below instead so that we don't have to hard code op names
+  bytes tf_graph_proto = 7;
+
+  // Also need to store the meta data for tensorflow.
+  // NOTE(nand): now we use a frozen meta graph because it has some extra information like collections
+  bytes tf_frozen_meta_graph = 8;
+
+  // Need to store the order of the aiids in case the caller passes them in in a different order.
+  repeated string aiids = 9;
+
+  // The environment for data (open, closed, etc. ) which tells us how to use inside/outside
+  // negatives.
+  TrainingEnvironment training_environment = 10;
+
+  // The application's concept IDs to be returned to the user.
+  // NOTE(nand): that this is only used for the mobile SDK where we need to map from concept id -> concept name.
+  //             The aiids field has the id from the concepts table of the database.
+  repeated string concept_ids = 11;
+  // FIXME(zeiler): we should replace aiids and concept_ids with just a list of Tag protos which can have both.
+
+  // How to handle concepts with missing positive examples. Default is SAMPLE_NEGATIVE_EMBEDDINGS.
+  MissingPositiveExamplePolicy missing_positive_example_policy = 12;
+}
+
+// The type of classifier to use.
+enum TrainingType {
+  M_VS_N = 0; // default
+  ONE_VS_N = 1;
+}
+
+// The type of classifier to use.
+enum TrainingEnvironment {
+  OPEN = 0; // default, model can be used in the wild.
+  CLOSED = 1; // means model will not work well in the wild.
+}
+
+message ConceptClassifierDump {
+  // Class name of the classifier from python
+  string classifier_type = 1;
+  // List of floats for the weights.
+  repeated float weight = 2 [packed = true];
+  // Bias as a single float.
+  float bias = 3;
+  // Norm of the weight, computed before storing.
+  float norm = 4 [deprecated = true];
+  // Logistic temperature used during training
+  float logistic_temp = 5;
+}
+
+// How to handle concepts with missing positive examples. If a concept has not positive examples
+// we fill in the the missing embeddings in one of the following ways:
+enum MissingPositiveExamplePolicy {
+  SAMPLE_NEGATIVE_EMBEDDINGS = 0; // Sample negative embeddings tied to underlying model
+  DISALLOW = 1; // Return an error if no positive example is found
+}

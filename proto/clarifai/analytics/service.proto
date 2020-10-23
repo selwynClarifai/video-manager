@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+import "proto/clarifai/analytics/resources.proto";
+import "proto/clarifai/api/status/status.proto";
+import "proto/clarifai/auth/scope/scope.proto";
+import "proto/clarifai/auth/util/extension.proto";
+
+import "google/api/annotations.proto";
+
+package clarifai.analytics;
+
+option go_package = "analytics";
+option java_multiple_files = true;
+option java_package = "com.clarifai.analytics";
+option objc_class_prefix = "CAIP";
+
+service AnalyticsService {
+  // Health Check
+  rpc GetHealthz (GetHealthzRequest) returns (GetHealthzResponse) {
+    option (google.api.http) = {
+            get: "/analytics/healthz"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  // Add a new analytics entry into our database
+  // note(lowjiansheng): not following convention for request formats as this proto definition is being used in many parts of Mobile SDK
+  rpc PostAnalytics (Analytics) returns (PostAnalyticsResponse) {
+    option (google.api.http) = {
+            post: "/analytics"
+            body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = KeyAuth;
+    option (clarifai.auth.util.cl_depending_scopes) = All;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/analytics/analytics.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostAnalyticsResponse {
+  clarifai.api.status.Status status = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/analytics/event.proto
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/analytics/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetHealthzRequest {
+}
+
+message GetHealthzResponse {
+  clarifai.api.status.Status status = 1;
+  string time = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+import "proto/clarifai/model_fetching/resources.proto";
+import "proto/utils/request_meta.proto";
+import "proto/spire/spire.proto";
+
+option go_package = "model_converter";
+
+service ModelConverterService {
+    rpc ModelConverterConvertModel (ModelConverterConvertModelRequest) returns (ModelConverterConvertModelResponse){}
+}
+
+message ModelConverterConvertModelRequest {
+    RequestMeta meta = 1;
+    clarifai.model_fetching.ModelInfo model_info = 2;
+}
+
+message ModelConverterConvertModelResponse {
+    ResponseStatus status = 1;
+    SpireConfig config = 2;
+}

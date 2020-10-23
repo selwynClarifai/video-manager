@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+import "proto/utils/request_meta.proto";
+
+service ConfigRunner {
+  rpc ConfigRun (ConfigRunRequest) returns (ConfigRunResponse) {}
+  rpc Shutdown (ShutdownRequest) returns (ShutdownResponse) {}
+}
+
+message ConfigRunRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // Config and/or eid to train
+  int64 eid = 2;
+  string config_json = 3;
+}
+
+message ConfigRunResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+
+  // for unsuccessful runs with an exception
+  // whether the error is one for which to retry the run
+  bool retry = 4;
+  // more exception info than what is included in response status
+  string exception_class = 5;
+  string exception_message = 6;
+  string exception_traceback = 7;
+}
+
+
+message ShutdownRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message ShutdownResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+}

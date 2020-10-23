@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "proto/utils/image.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Frame {
+  // Optional name for the frame.
+  string name = 1;
+
+  // A frame sampled at some fps
+  Image image = 2;
+
+  // optional timestamp (TODO: units).
+  int32 timestamp = 1000;
+}

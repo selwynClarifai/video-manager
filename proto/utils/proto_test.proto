@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+import "proto/utils/request_meta.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message AnotherMessage {
+  string id = 1;
+}
+
+message MyMessage {
+  string name = 1;
+  uint32 num = 2;
+  AnotherMessage another_msg = 3;
+}
+
+message ProtoTest {
+  string scalar = 1;
+  repeated uint32 repeated_scalar = 2;
+  MyMessage msg = 3;
+  repeated MyMessage repeated_msg = 4;
+  map<string, string> map_scalar = 5;
+  map<string, MyMessage> map_msg = 6;
+}
+
+// Interface exported by the server.
+service ProtoTestService {
+  // Predict given a trained model and embeddings from some examples
+  rpc ProtoTestPredict (ProtoTestRequest) returns (ProtoTestResponse) {}
+}
+
+message ProtoTestRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+
+  string value = 2;
+  uint32 sleep_time = 3;
+}
+
+message ProtoTestResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+
+  string value = 2;
+  uint32 sleep_time = 3;
+}

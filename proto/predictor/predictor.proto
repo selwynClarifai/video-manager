@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+import "proto/concept_trainer_dump/concept_trainer_dump.proto";
+import "proto/predictor/predictor_metrics.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/embedding.proto";
+import "proto/utils/request_meta.proto";
+
+
+option go_package = "predictor";
+
+// Interface exported by the server.
+service PredictorService {
+  // Predict given a trained model and embeddings from some examples
+  rpc PredictorPredict (PredictorPredictRequest) returns (PredictorPredictResponse) {}
+
+  // Predict given a trained model and embeddings from some examples
+  // return result with topk examples sorted
+  rpc PredictorPredictSQLQuery (PredictorPredictSQLQueryRequest) returns (PredictorPredictResponse) {}
+
+  // Put new DataExamples into the desired collection.
+  rpc PredictorTrain (PredictorTrainRequest) returns (PredictorTrainResponse) {}
+
+  // Same as above except server streams back intermediate results
+  rpc PredictorTrainStream (PredictorTrainRequest) returns (stream PredictorTrainResponse) {}
+
+  // Get the weights as a list of embeddings from the given model.
+  rpc PredictorGetWeights (PredictorGetWeightsRequest) returns (PredictorGetWeightsResponse) {}
+
+  // evaluate a model
+  rpc PredictorGetMulticlassMetrics (PredictorTrainAndEvalRequest) returns (MulticlassMetricsResponse) {}
+}
+
+message PredictorPredictRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch with DataExample's that have the predicted Emeddding set already for each as well as
+  // any labelled metadata provided in Tag protos.
+  DataBatch data = 2;
+  // The trained ConceptTrainer name to read from s3.
+  string trainer_name = 3;
+  // The concept IDs to be predicted. If not specified we reply with the top N concepts.
+  repeated string aiids = 4;
+  // The number of top predictions to return for TAG op. If left at 0 then uses DEFAULT_TOPK.
+  int32 topk = 5;
+  // Flag to indicate if the trainer should include its full aiid list with response
+  bool echo_aiids = 6;
+}
+
+message PredictorPredictSQLQueryRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // sql_query to use from Python to iterate over assets. Example:
+  //   SELECT DISTINCT ON (asset_cfid, cfid)
+  //     jsonb_build_object('tag', COALESCE(annotations_history.data -> 'tag', '{{}}')) AS annotation,
+  //     annotations_history.annotation_id                                              AS id,
+  //     annotations_history.data ->> 'cfid'                                            AS cfid,
+  //     annotations_history.asset_id,
+  //     annotations_history.data ->> 'asset_cfid'                                      AS asset_cfid,
+  //     ma.embedding                                                                   AS embedding
+  //   FROM api.annotations_history
+  //     JOIN api.models_assets_embed AS ma
+  //       ON annotations_history.application_id = ma.application_id AND annotations_history.annotation_id = ma.annotation_id
+  //          AND annotations_history.asset_id = ma.asset_id
+  //   WHERE (((annotations_history.created_at <= now()) AND
+  //           (annotations_history.application_id = 'f2d9f7d5c1e042e0816d6b34dfda1654')) AND (ma.is_deleted = FALSE)) AND
+  //         (ma.model_version_id = 'bb7ac05c86be42d38b67bc473d333e07')
+  //   ORDER BY asset_cfid DESC, cfid DESC, annotations_history.created_at DESC
+  string sql_query = 2;
+  // The trained ConceptTrainer name to read from s3.
+  string trainer_name = 3;
+  // The number of top DataExamples in the DataBatch to return. If left at 0 then return all.
+  int32 top_k_data_examples = 4;
+  // The concept IDs to be predicted. If not specified we reply with the top N concepts.
+  repeated string aiids = 5;
+  // The number of top predictions to return for TAG op. If left at 0 then uses DEFAULT_TOPK.
+  int32 top_k_predictions = 6;
+  // Flag to indicate if the trainer should include its full aiid list with response
+  bool echo_aiids = 7;
+}
+
+message PredictorPredictResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The DataBatch format is used as we regularly use scored tags everywhere. This is filled in with
+  // one DataExample per DataExample that was input. Each DataExample is filled in with one
+  // predicted Tag with cname as it's name and label_value as it's predict probability.
+  DataBatch results = 2;
+  // Optional list of aiids to return from the classifier
+  repeated string aiids = 3;
+}
+
+message PredictorTrainAndEvalRequest{
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  PredictorTrainRequest train_request = 2;
+  // Any of the fields you wish to compute in the eval, this let us disable the computation of expensive things like the confusion matrix
+  EvalSpec eval_spec = 3;
+}
+
+message PredictorTrainRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // Required: name to save the trained ConceptTrainer name to s3. This should be the unique
+  // identifier from the database. This will be saved in a sub-folder depending on the environment
+  // that is being run (local, dev, staging, prod, test, etc.).
+  string trainer_name = 2;
+  // Optional: if true then it loads the previously trained ConceptTrainer trainer_name from s3.
+  bool use_prev_trained = 3;
+  // The type of classifier to use (define by ConceptTrainer). 0 is M_VS_N which is the default.
+  TrainingType training_type = 4;
+
+  oneof training_data {
+    // DataBatch of DataExamples that has the predicted Emeddding set already as well as Tag protos
+    // for each DataExample. Each Tag proto must have the cname field set.
+    DataBatch data = 100;
+    // sql_query to use from Python to iterate over training data. Something like this should be
+    // used as the query:
+    // select a.id as id, a.application_id as application_id, a.annotation as annotation,
+    // ma.embedding as embedding from assets."r3c9NWO-RgWOzG2QzV74Jg" a inner join
+    // models_assets."r3c9NWO-RgWOzG2QzV74Jg" ma on a.id = ma.asset_id where
+    // a.annotation is not null;
+    string sql_query = 101;
+  }
+  // The embeddings model that the embedding layer was created for. For now this is just the spire
+  // name. This is ignored if using the Databatch data training_data because the embedding contains
+  // the model information that was used to embed it.
+  // FIXME(zeiler): this is pretty brittle here, we should move the outside negatives to a better
+  // that is named after something consistent.
+  string embeddings_model = 5;
+  // The concept IDs that are in this model. This is used in the dictionary of classifiers that are
+  // to s3.
+  repeated string aiids = 6;
+
+  // Number of iterations to loop through the training_data and train the model. The minibatch
+  // size is fixed to 128 (to allow proper initialization of cluster and training).
+  int32 train_iters = 7;
+
+  // The type of training environment (open/closed).
+  TrainingEnvironment training_environment = 8;
+
+  // A stringified json containing optional hyper parameters used for training
+  string hyper_parameters = 9;
+
+  // How to handle concepts with missing positive examples.
+  MissingPositiveExamplePolicy missing_positive_example_policy = 10;
+}
+
+message PredictorTrainResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The trained ConceptTrainer proto to return and persist.
+  // Note that PredictorTrain does not currently fill this in (use PredictorGetWeights instead).
+  ConceptTrainerDump trainer = 2;
+  // These are the aiids for which there were no positive examples.
+  repeated string failed_aiids = 3;
+  // status of training job
+  ProgressStatus progress_status = 4;
+}
+
+
+message PredictorGetWeightsRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // Required: name to save the trained ConceptTrainer name to s3. This should be the unique
+  // identifier from the database. This will be saved in a sub-folder depending on the environment
+  // that is being run (local, dev, staging, prod, test, etc.).
+  string trainer_name = 2;
+  // The embeddings model that the embedding layer was created for. For now this is just the spire
+  // name. This is ignored if using the Databatch data training_data because the embedding contains
+  // the model information that was used to embed it.
+  string embeddings_model = 5 [deprecated = true];
+}
+
+message PredictorGetWeightsResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // Deprecated - instead we will use the ConceptTrainer proto below.
+  // The trained weights, one for each concept id to weight.
+  map<string, Embedding> weights = 2;
+  // The trained ConceptTrainer proto ready to be used for fprop.
+  ConceptTrainerDump trainer = 3;
+}
+
+message EvalSpec {
+  // Controls how many concepts are returned for each ground truth concept in the confusion matrix.
+  // E.g. if 5, then for each concept the elements with the top 5 values will be returned.  This in essence gives us
+  // the flexibility to return a sparse confusion matrix.
+  // Set to 0 (or any number >= num concepts) to get the entire dense matrix.
+  // Set to -1 to suppress returning any confusion matrix.
+  int32 confusion_matrix_topk = 1;
+  // Same semantics as preceding field, except controls the cooccurrence matrix.
+  int32 cooccurrence_matrix_topk = 2;
+}

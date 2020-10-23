@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+import "proto/utils/request_meta.proto";
+
+option go_package = "inference_coordinator";
+
+// Interface exported by the server.
+service InferenceCoordinator {
+  // Deploy a Spire
+  rpc DeploySpire (DeploySpireRequest) returns (DeploySpireResponse) {}
+  // Delete a Spire
+  rpc DeleteSpire (DeleteSpireRequest) returns (DeleteSpireResponse) {}
+  // Check whether a spire is running
+  rpc GetSpireDeployStatus (GetSpireDeployStatusRequest) returns (GetSpireDeployStatusResponse) {}
+  // Get list of spires
+  rpc ListSpires (ListSpiresRequest) returns (ListSpiresResponse) {}
+}
+
+// Deploy Spire
+
+message DeploySpireRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // Spire name
+  string spire_name = 2;
+  // Path for the config to pass to spire
+  string spire_config_location = 3;
+  // Root folder that contains the eid dir with checkpoint files
+  string checkpoint_root = 4;
+  // jwt token to authorize this request, uses inferenceCoordinatorJWT secret with HS256 algorithm
+  string jwt = 5;
+}
+
+message DeploySpireResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+}
+
+// Delete Spire
+
+message DeleteSpireRequest {
+  RequestMeta meta = 1;
+  string spire_name = 2;
+  // jwt token to authorize this request, uses inferenceCoordinatorJWT secret with HS256 algorithm
+  string jwt = 3;
+}
+
+message DeleteSpireResponse {
+  ResponseStatus status = 1;
+}
+
+// Check whether a spire is running
+
+message GetSpireDeployStatusRequest {
+  RequestMeta meta = 1;
+  string spire_name = 2;
+  // jwt token to authorize this request, uses inferenceCoordinatorJWT secret with HS256 algorithm
+  string jwt = 3;
+}
+
+message GetSpireDeployStatusResponse {
+  ResponseStatus status = 1;
+  ResourceObjectsStatus resource_objects_status = 3;
+}
+
+message ResourceObjectsStatus {
+  bool service_running = 1;
+  bool deployment_running = 2;
+  bool hpa_running = 3;
+}
+
+// List spires
+
+message ListSpiresRequest {
+  RequestMeta meta = 1;
+  // jwt token to authorize this request, uses inferenceCoordinatorJWT secret with HS256 algorithm
+  string jwt = 2;
+  // Filter for this request if you don't need all spires that are up, but only ones that fit the filter.
+  ListSpiresFilter filter = 3;
+}
+
+// A filter object to filter down the response of ListSpires
+message ListSpiresFilter {
+  // This will filter the spire list to only return spires that have their current replicas equal to the HPAs min replicas.
+  bool has_min_replicas = 1;
+}
+
+message ListSpiresResponse {
+  ResponseStatus status = 1;
+  // List of spires, which is filtered down if a filter is passed.
+  repeated string spire_names = 2;
+}

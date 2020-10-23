@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Tag {
+  // The integer label into the neural net output layer.
+  int32 label_num = 1;
+  // The value
+  float label_value = 2;
+  // The global aiid. Same ones as use in Concept message.
+  // When using this field inside the API it is the primary key of the concepts table (globally
+  // unique across all users). If this field is non-empty then it will be preferred over the
+  // user_unique_id + app_id fields below.
+  string aiid = 3;
+  // Category name -- cname for concept train, catname for datasets.
+  string cname = 4;
+
+  // This is the user unique id for a concept. It is not globally unique and should.
+  string user_unique_concept_id = 5;
+  // This is the application id for the concept. It is also user_unique_id of the app.
+  // If this is not set then it should be assumed this Tag is owned by the caller App.
+  string user_unique_app_id = 6;
+  // This is the user id for the concept. It is the user_unique_id of the user.
+  // If this is not set then it should be assumed this Tag is owned by the caller User.
+  string user_unique_user_id = 7;
+}

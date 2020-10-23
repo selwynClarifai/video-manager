@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+import "proto/utils/checkpoint.proto";
+import "proto/utils/data_example.proto";
+import "proto/utils/data_provider.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+import "proto/utils/tag.proto";
+import "proto/utils/vocab.proto";
+
+option go_package = "spire";
+
+message FaceDetectConfig {
+  // One of 'dlib', 'opencv', 'spire'
+  string type = 1;
+
+  // The spire config name for the face model when using type 'spire'
+  string spire_config = 2;
+
+  // A threshold for the 'spire' detector.
+  float detect_threshold = 3;
+
+  // filename path for 'opencv' cascades.
+  string cascade_path = 4;
+
+  // min size of detection for downstream classifier to run on.
+  float min_size = 5;
+
+  // how to crop the bbox before sending to the classification model
+  BBoxCropConfig bbox_crop = 6;
+}
+
+message BBoxCropConfig {
+  // Type of processing to do when taking a bounding box
+  // One of 'square', 'original'
+  // 'square' is the face_detect behavior of taking a square box
+  // 'original' takes only the bounding box crop, without resizing
+  string type = 1;
+
+  // The margin used when cropping the bbox
+  // e.g. 1.1 will expand the box by 10%
+  float margin = 2;
+}
+
+message MultiHeadConfig {
+  // the dataset name
+  string dataset = 1 [deprecated = true];
+
+  // the key for the layer to write the results into the Face proto message.
+  string face_key = 2;
+
+  // The vocabulary of tags that this head outputs.
+  Vocab vocab = 3;
+}
+
+// general categorization of the type of model
+enum SpireModelType {
+  NOT_SET = 0;        // the default output value if the type is not set
+  CLASSIFICATION = 1; // when the result is a classification databatch
+  DETECTION = 2;      // when the result is a detection databatch
+  EMBEDDINGS_CLASSIFICATION = 3; // this is for custom training models
+}
+
+// This is the config represented as yaml in spire.yaml.
+// This is a stripped down version of the TrainConfig proto as most
+// fields are not required at spire time.
+message SpireConfig {
+  string name = 1;
+  int64 eid = 2;
+  // This is no longer needed as spire only has one purpose (serving).
+  string exp_type = 3 [deprecated = true];
+  string dataset = 4 [deprecated = true]; // deprecated -- use heads['default'].vocab instead
+  int64 gpu_memory = 5;
+  int32 gpu_batch_size = 6;
+
+  string device_type = 7;
+  int32 num_devices = 8;
+
+  string detection_layer_name = 9;
+  float detection_score_threshold = 10;
+  int32 detection_max_bboxes = 26;
+  repeated string embedding_layer_names = 11;
+
+  // If True then will look at the MultiHeadConfig heads
+  bool is_multiheaded = 12;
+  // Used to map heads of a model (layername as a string) to different
+  // vocabularies (DataExample with an ordered list of tags).
+  // The layername is the key in the "outputs" dictionary from your tf_config,
+  // it is NOT the name of the op within the graph.
+  //
+  // heads:
+  //   softmax_age:
+  //     dataset: age_merged_dp # age_facecrawl_okc_cropped
+  //     face_key: age
+  //   softmax_gender:
+  //     dataset: gender_merged_dp
+  //     face_key: gender
+  //   softmax_ethnicity:
+  //     dataset: ethnicity_facecrawl_okc_cropped_pruned
+  //     face_key: ethnicity
+  map<string, MultiHeadConfig> heads = 13;
+
+  // For face spires we need extra configuration for the detector.
+  // NOTE(zeiler): this was discovered to also work as expected if you set this
+  // config to use any general object detection model in the spire_config here.
+  // We haven't changed the name here in order to keep things simple for
+  // existing implementations.
+  // FIXME(zeiler): finish the work to clean up the name to not include face.
+  FaceDetectConfig face_detect = 14;
+
+  // This is a list of model names that are nice.
+  SpireMeta meta = 15;
+
+  // The same data provider parameters as TrainConfig uses during
+  // training.
+  DataProviderParams data_provider_params = 16;
+
+  // See docs for LoadCheckpointScope
+  repeated LoadCheckpointScope load_checkpoint_scopes = 17;
+
+  // Marks the timestamp when the config was pushed.
+  float timestamp_ms = 18;
+
+  // a flag hinting on how the clients should parse the results of the model
+  SpireModelType model_type = 19;
+
+  // ID describing when there are signiciant change in the model format
+  // should be an increasing value
+  int64 compatibility_version_id = 20;
+
+  // optional unique identifier for the model
+  string uuid = 21;
+
+  SpireSpatialReduceType spatial_reduce_type = 22;
+  // cpu_resources:
+  //   dev:
+  //     cpu_core_request: "1000m"
+  //     cpu_core_limit: "4000m"
+  //     cpu_mem_request: "2500Mi"
+  //     cpu_mem_limit: "2500Mi"
+  //   staging:
+  //     ...
+  //   prod:
+  //     ...
+  map<string, CPUResources> cpu_resources = 23;
+  // replicas:
+  //   dev:
+  //     minimum: 1
+  //     maximum: 2
+  //   staging:
+  //     ...
+  //   prod:
+  //     ...
+  map<string, Replicas> replicas = 24;
+
+  // The spire_conf name of the embedding model used. Example, 110034_sorta2
+  string embeddings_spire_conf = 25;
+  // The spire_conf name of the landmarks model used. Example, face_2Dlandmarks
+  string landmarks_spire_conf = 28;
+
+  // The framework in which the model is implemented
+  enum Framework {
+       TENSORFLOW = 0;
+       PYTORCH = 1;
+       }
+  Framework model_framework = 27;
+}
+
+message Replicas {
+  int32 minimum = 1;
+  int32 maximum = 2;
+}
+
+message CPUResources {
+  string cpu_core_request = 1;
+  string cpu_core_limit = 2;
+  string cpu_mem_request = 3;
+  string cpu_mem_limit = 4;
+}
+
+enum SpireSpatialReduceType {
+  MEAN = 0;
+  MAX = 1;
+}
+
+message SpireMeta {
+  repeated string models = 1;
+  string lopq_model = 2;
+}
+
+//////////////////////////////////////////
+
+enum SpireState {
+  NO_CONFIG = 0; // previously false for is_ready and is_started (ie. server
+  // started but no config).
+  NET_EXISTS = 1; // previously is_ready
+  NET_JITTED = 2; // previously is_started
+}
+
+message SpireGetConfigRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // If True then the confi lock is used before returning the config causing
+  // this call to wait until
+  // the initialization processes release the lock.
+  bool use_lock = 2;
+}
+message SpireGetConfigResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The config of the model as JSON string.
+  string config_json = 2;
+  // Proper proto version of spire config.
+  SpireConfig config = 3;
+}
+
+message SpireSetConfigRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // The config of the model as JSON string.
+  string config_json = 2;
+  // Proper proto version of spire config.
+  SpireConfig config = 3;
+}
+
+message SpireSetConfigResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+}
+
+message SpireGetStateRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message SpireGetStateResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The current state of the spire net.
+  SpireState state = 2;
+  // The last time a prediction request came through
+  google.protobuf.Timestamp last_inference_time = 3;
+}
+
+message SpireMaybeJITRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message SpireMaybeJITResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The current state of the spire net.
+  SpireState state = 2;
+}
+
+message SpireStopServingRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message SpireStopServingResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The current state of the spire net after it is stopped.
+  SpireState state = 2;
+}
+
+// The list of supported spire operations to run on a DataBatch.
+enum SpireOps {
+  TAG = 0;
+  EMBED = 1;
+  FACE_DETECT = 2;
+  OCR = 3;
+  LANDMARKS = 4;
+}
+
+message SpireEmbedTagRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of operations to run on the model.
+  repeated SpireOps ops = 3;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 4;
+  // The number of fps to use for processing video.
+  float fps = 5;
+  // List of concepts to select for using select_concept_ids
+  // Need to set the aiid field of each Tag.
+  repeated Tag tags_to_watch = 6;
+  // The language two letter abbreviation.
+  string language = 7 [deprecated = true];
+}
+
+message SpireEmbedTagResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}
+
+message SpireSavedOutputRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of layers to store.
+  repeated string store_layers = 3;
+  // If True then it will reduce the number of views for each DataExample down
+  // to 1.
+  bool reduce_num_views = 4;
+  // If True then it will reduce the spatial extent of each example down to 1x1.
+  bool reduce_output_space = 5;
+  // The number of fps to use for processing video.
+  float fps = 6;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 7;
+}
+
+message SpireSavedOutputResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}
+
+message SpireFaceDetectEmbedTagRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of operations to run on the model.
+  repeated SpireOps ops = 3;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 4;
+  // The number of fps to use for processing video.
+  float fps = 5;
+  // List of concepts to select for using select_concept_ids.
+  // Need to set the aiid field of each Tag.
+  repeated Tag tags_to_watch = 6;
+  // The language two letter abbreviation.
+  string language = 7 [deprecated = true];
+}
+
+message SpireFaceDetectEmbedTagResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}
+
+message SpireInstanceSegmentRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of operations to run on the model.
+  repeated SpireOps ops = 3;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 4;
+  // The number of fps to use for processing video.
+  float fps = 5;
+  // List of concepts to select for using select_concept_ids or select_classes.
+  // Need to set the aiid
+  // or the cname field of each Tag.
+  repeated Tag tags_to_watch = 6;
+}
+
+message SpireInstanceSegmentResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}
+
+
+message SpireDetectRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of operations to run on the model.
+  repeated SpireOps ops = 3;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 4;
+  // The number of fps to use for processing video.
+  float fps = 5;
+  // List of concepts to select for using select_concept_ids.
+  // Need to set the aiid field of each Tag.
+  repeated Tag tags_to_watch = 6;
+  // Detection score threshold. If set, it supersedes config.
+  float detection_score_threshold = 7;
+}
+
+message SpireTrackRequest {
+
+  // The results from the Detection response
+  DataExample data = 1;
+}
+
+message SpireDetectResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}
+
+message SpireTrackResponse {
+  // Status for the request
+  ResponseStatus status = 1;
+  // The results of the tracker come back in a DataBatch
+  DataBatch results = 2;
+
+}
+
+
+
+// This is a combined detection request for both face and object detect models.
+message SpireDetectEmbedTagRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataBatch of DataExamples to run each of the operations on for the given
+  // spire.
+  DataBatch data = 2;
+  // The set of operations to run on the model.
+  repeated SpireOps ops = 3;
+  // The number of top predictions to return for TAG op. If left at 0 then uses
+  // DEFAULT_TOPK.
+  int32 topk = 4;
+  // The number of fps to use for processing video.
+  float fps = 5;
+  // List of concepts to select for using select_concept_ids.
+  // Need to set the aiid field of each Tag.
+  repeated Tag tags_to_watch = 6;
+  // Detection score threshold. If set, it supersedes config.
+  float detection_score_threshold = 7;
+}
+
+message SpireDetectEmbedTagResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The results of the predictions come back in a DataBatch as well where the
+  // meta data is filled
+  // in to each of the DataExamples within.
+  DataBatch results = 2;
+}

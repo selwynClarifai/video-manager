@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "proto/clarifai/api/status/status_code.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message ResponseStatus {
+  // We use the convention to return this from GRPC services when we try / catch something and are
+  // not sure of a better response to return.
+
+  // True if everything is good and you don't need to parse anything else. False means look into
+  // details as it's bad.
+  bool ok = 1;
+
+  clarifai.api.status.StatusCode code = 2;
+  // Status message. This is a human readable message of what happened (if you know it). This should
+  // be safe in general to return to a customer.
+  string user_msg = 3;
+  // String of exception that was returned by server.
+  string exception_msg = 4;
+  // Stack trace from the server to return. This should not in general be safe to return to user.
+  string trace = 5;
+
+  // optional duration of the request. https://github.com/google/protobuf/issues/169
+  google.protobuf.Duration duration = 1003;
+
+}
+
+message RequestMeta {
+  // This should be passed with requests so we can properly track and log requests.
+  string requestID = 1;
+  // Any additional meta data to pass in the request and to be logged (so make it clean).
+  map<string, string> metadata = 2;
+  // Add an identifier we can uses to track a user through out
+  // platform. This might be based off their email or id or another
+  // unique piece of information that makes monitoring dashboards easy
+  // to support.
+  string requesterID = 3;
+}

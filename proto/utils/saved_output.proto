@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "proto/utils/ndarray.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message SavedOutput {
+  // Shape of the saved outputs.
+  NDArray array = 4;
+  // The layer name that they came from.
+  string layer_name = 2;
+  // The data layout for the ndarray -- used to transpose to correct layout.
+  DataLayout data_layout = 5;
+}
+
+// Data layout for the saved output ndarray.
+enum DataLayout {
+  CWHN = 0; // striate default
+  NHWC = 1; // tensorflow default
+  NCHW = 2; // tensorflow alternate (faster for cudnn)
+}

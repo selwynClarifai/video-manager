@@ -1,0 +1,26 @@
+syntax = 'proto3';
+
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+// The deprecated BoundingBox proto has been moved to a new file, boundingbox.proto.  
+// This was necessary to prevent a circular dependency now that embedding.proto imports bbox.proto.
+
+message Mask {
+  bytes encoded_bytes = 1;
+}
+
+// This is the new bounding box protobuf, with only the bounding box coordinates
+message BBox {
+  // The top row position. Stored as [0...1.0]
+  float top_row = 3 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The left most column.  Stored as [0...1.0]
+  float left_col = 4 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The bottom row posotion.  Stored as [0...1.0]
+  float bottom_row = 5 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The right most column.  Stored as [0...1.0]
+  float right_col = 6 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+

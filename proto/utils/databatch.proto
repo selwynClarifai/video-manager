@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "proto/utils/data_example.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message DataBatch {
+  // some header / version fields here
+
+  // The databatch simply has multiple DataExample protos.
+  repeated DataExample example = 1;
+
+  // Where the databatch came from.
+  string source = 2;
+  // When it was created.
+  // Uses the Timestamp proto: https://github.com/google/protobuf/blob/master/src/google/protobuf/timestamp.proto
+  google.protobuf.Timestamp created = 3;
+}

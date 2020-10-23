@@ -1,0 +1,146 @@
+
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package clarifai.analytics;
+
+option go_package = "analytics";
+option java_multiple_files = true;
+option java_package = "com.clarifai.analytics";
+option objc_class_prefix = "CAIP";
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/analytics/analytics.proto
+////////////////////////////////////////////////////////////////////////////////
+message DeviceInfo {
+  string brand = 1;   // Apple, Samsung, LG, etc
+  string model = 2;   // iPhone10,3
+}
+
+message EventSummary {
+  uint32 count = 1;                               // Number of events logged under this grouping
+  string name = 2;                                // Name associated with the event type
+  AnalyticsEventType event_type = 3;
+  NetworkConnectivity network_connectivity = 4;
+  RunningMode running_mode = 5;
+  string model_id = 6;                            // id of the model associated with the event
+  string model_version_id = 7;                    // id of the model version associated with the event
+}
+
+message EventsCollection {
+  google.protobuf.Timestamp time_range_begin = 1; // Begin of the events summary time range
+  google.protobuf.Timestamp time_range_end = 2;   // End of the events summary time range
+  repeated EventSummary event_summary = 3;
+}
+
+message HostAppInfo {
+  string build_number = 1;  // Host app build number
+  string api_key = 2;       // Clarifai's API Key associated with the host app
+  string version = 3;       // Host app version
+}
+
+message OperatingSystem {
+  string name = 1;      // macOS, Linux, FreeBSD, etc
+  string version = 2;   // Version of the OS
+}
+
+message SDK {
+  string version = 1;
+  string build = 2;
+}
+
+message State {
+  string country_code = 1;                              // US, UK, SK, etc
+  uint32 launch_count = 2;                              // Number of times (cumulative over lifetime) the SDK has been launched
+  string language_code = 3;                             // en, fr, cs
+  uint64 token_count = 4;                               // Number used tokens. Starts from 0 and counts towards a budget, until renewed by the server
+  int32 time_zone_offset = 5;                           // Time zone offset (number of seconds from GMT)
+  string time_zone_abbreviation = 6;                    // Time zone abbreviation (EST, PST, GMT, etc)
+  RunningEnvironment running_environment = 7;
+}
+
+message Analytics {
+  string batch_unique_identifier = 1;       // Unique identifier for this data packet, in order to avoid duplicates on the server side
+  DeviceInfo device_info = 2;
+  repeated EventsCollection events_collection = 3;
+  HostAppInfo host_app_info = 4;
+  OperatingSystem operating_system = 5;
+  State state = 6;
+  string system_uuid = 7;                   // System unique identifier for the combination user + device
+  google.protobuf.Timestamp timestamp = 8;  // Timestamp the data was persisted on the device
+  SDK sdk = 9;
+}
+
+enum AnalyticsEventType {
+  UNKNOWN_EVENT_TYPE = 0;
+  SAVE_MODEL = 1;
+  TRAIN = 2;
+  PREDICT = 3;
+  SAVE_CONCEPT = 4;
+  DELETE_CONCEPT = 5;
+  SAVE_INPUT = 6;
+  LOAD_INPUT = 7;
+  VISUAL_SIMILARITY = 8;
+  LOAD_CONCEPT = 9;
+  DELETE_INPUT = 10;
+  DELETE_MODEL = 11;
+  LOAD_MODEL = 12;
+  WARNING = 13;                 // Something didn't go according to plan (e.g. a prediction failed, empty vector parameter)
+  ERROR = 14;                   // An operation failed (e.g. failed to build a batch, model file is corrupted)
+  LAUNCH = 15;                  // App launch
+  FOREGROUND = 16;              // App is brought to the foreground
+  BACKGROUND = 17;              // App is sent to the background
+  TERMINATION = 18;             // Force quit app
+  AUTHENTICATION_GRANTED = 19;  // Authentication result received: granted
+  AUTHENTICATION_DENIED = 20;   // Authentication result received: denied
+  MODEL_DOWNLOAD = 21;          // Model has been downloaded from the cloud to an SDK (Device)
+}
+
+enum NetworkConnectivity {
+  NO_CONNECTIVITY = 0;
+  WIFI = 1;
+  CELLULAR = 2;   // WAN
+  WIRED = 3;      // Ethernet, USB, etc
+}
+
+enum RunningMode {
+  UNKNOWN_RUNNING_MODE = 0;
+  LOCAL = 1;    // Instruction runs on device
+  REMOTE = 2;   // Instruction runs remotely, on the cloud
+}
+
+enum RunningEnvironment {
+  UNKNOWN_RUNNING_ENVIRONMENT = 0;
+  DEVELOPMENT = 1;
+  PRODUCTION = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/analytics/event.proto
+////////////////////////////////////////////////////////////////////////////////
+message Event {
+  string id = 1; // Event's universally unique identifier (UUID)
+  string name = 2; // The event name is derived from type
+  AnalyticsEventType type = 3;
+  RunningMode running_mode = 4;
+  NetworkConnectivity network_connectivity = 5;
+  google.protobuf.Timestamp timestamp = 6; // Timestamp the event was logged
+  string model_id = 7; // Model id (if available)
+  string model_version_id = 8; // Model version id (if available)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/analytics/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////

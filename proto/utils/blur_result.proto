@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+import "proto/utils/boundingbox.proto";
+import "proto/utils/request_meta.proto";
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message BlurResult {
+  ResponseStatus status = 1 [deprecated = true];
+  float extent = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+  repeated BoundingBox bboxes = 3 [deprecated = true];
+  float global_extent = 4 [deprecated = true];
+  repeated float local_extents = 5 [deprecated = true];
+}

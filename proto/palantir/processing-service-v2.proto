@@ -1,0 +1,414 @@
+/*
+ * (c) Copyright 2019 Palantir Technologies Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+ syntax = "proto3";
+
+ import "google/protobuf/duration.proto";
+ 
+ option java_package = "com.palantir.aip.proto.processor.v2";
+ option java_outer_classname = "ProcessorV2Protos";
+ 
+ package aip.processor.v2;
+ 
+ /**
+  * Processor implementations may choose to implement one or more of the available processor endpoints.
+  *
+  * No guarantees are made about the sequence in which GeoRegister, Infer, and Track capabilities are invoked. See
+  * Request messages for details on guarantees about optional content in request messages.
+  */
+ service ProcessingService {
+     /** Given airborne platform metadata and pixels, provide an updated platform position, camera stare point, and earth lattice. */
+     rpc GeoRegister (GeoRegistrationRequest) returns (GeoRegistrationResponse) {
+     }
+     /** Given airborne platform metadata and pixels, return inferences for objects found in the pixels. */
+     rpc Infer (InferenceRequest) returns (InferenceResponse) {
+     }
+     /**
+      * Provide stable object identifiers for objects in the current frame given optional airborne platform metadata,
+      * optional new inference information, and pixels.
+      *
+      * Note that Track may be called even when GeoRegister and Infer have not been invoked on the current frame, and
+      * that Track may provide results for the current frame when no inferences are provided as input, and fewer or
+      * more results than the input inferences.
+      */
+     rpc Track (TrackRequest) returns (InferenceResponse) {
+     }
+ }
+ 
+ enum ImageFormat {
+     RGB888 = 0;
+     PNG = 1;
+     TIFF = 2;
+     BGR888 = 3;
+     NITF21 = 4;
+ }
+ 
+ message ProcessorV2Config {
+     /** Indicates to the orchestrator in what format to emit frames to this provider. */
+     ImageFormat image_format = 1;
+ 
+     /** A non-empty list of capabilities this ProcessingService supports. */
+     repeated Capability capabilities = 2;
+ 
+     enum Capability {
+         GEO_REGISTER = 0;
+         INFER = 1;
+         TRACK = 2;
+     }
+ }
+ 
+ message RequestHeader {
+     Identifier identifier = 1;
+     google.protobuf.Duration deadline = 2;
+     Timestamp timestamp = 3;
+ }
+ 
+ /** The unique identifier for a unit of work and its associated result. */
+ message Identifier {
+     uint64 stream_id = 1;
+     uint64 frame_id = 2;
+ }
+ 
+ message Timestamp {
+     /**
+      * Elapsed nanoseconds from some unspecified point in time. Guaranteed to be monotonically increasing across
+      * subsequent frames on the same stream.
+      */
+     uint64 nanos = 1;
+ }
+ 
+ message GeoRegistrationRequest {
+     RequestHeader header = 1;
+     Frame frame = 2;
+ }
+ 
+ message GeoRegistrationResponse {
+     Identifier identifier = 1;
+     GeoRegistration geo_registration = 2;
+ }
+ 
+ message InferenceRequest {
+     RequestHeader header = 1;
+     Frame frame = 2;
+ }
+ 
+ message InferenceResponse {
+     Identifier identifier = 1;
+     Inferences inferences = 2;
+ }
+ 
+ message TrackRequest {
+     RequestHeader header = 1;
+     Frame frame = 2;
+ 
+     oneof maybe_inferences {
+         Inferences inferences = 3;
+     }
+ 
+     oneof maybe_geo_registration {
+         GeoRegistration geo_registration = 4;
+     }
+ }
+ 
+ message GeoRegistration {
+     Lattice lattice = 1;
+     double confidence = 2;
+     UasMetadata updatedMetadata = 3;
+ }
+ 
+ message Inferences {
+     repeated Inference inference = 1;
+ }
+ 
+ message Inference {
+     /** Persistent id of a particular inference that's used to tie together inferences across frames. */
+     string inferenceId = 1;
+ 
+     oneof inference {
+         BoundingBox box = 2;
+         BoundingPolygon polygon = 3;
+         GeoBoundingBox geo_box = 5;
+         GeoBoundingPolygon geo_polygon = 6;
+     }
+ 
+     Velocity velocity = 4;
+ }
+ 
+ /*
+  * GeoCoordinate represents a unique point on the Earth's surface, defined by a latitude and longitude.
+  */
+ message GeoCoordinate {
+     double latitude = 1;
+     double longitude = 2;
+ }
+ 
+ /*
+  * A rectangular container defined by its coordinates:
+  *   drawn from (c0.row, c0.col) to (c1.row, c1.col)
+  *   height = c1.row - c0.row
+  *   width = c1.col - c0.col
+  */
+ message BoundingBox {
+     /** Upper left corner */
+     UnitCoordinate c0 = 1;
+ 
+     /** Lower right corner */
+     UnitCoordinate c1 = 2;
+ 
+     /**
+      * Each BoundingBox may be labeled with potentially many classifications. Classifications do not necessarily need
+      * to relate, and it’s valid, for instance, to return results such as:
+      *   [ motorcycle: 0.5, person: 0.5]
+      *   [ vehicle: 0.9, car: 0.5, truck: 0.4 ]
+      */
+     repeated Classification classifications = 3;
+ }
+ 
+ /*
+  * A bounding box defined by a GeoCoordinate pair.
+  */
+ message GeoBoundingBox {
+     /** Upper left lat/long */
+     GeoCoordinate c0 = 1;
+     
+     /** Lower right lat/long */
+     GeoCoordinate c1 = 2;
+     
+     repeated Classification classifications = 3;
+ }
+ 
+ message BoundingPolygon {
+     Polygon polygon = 1;
+     repeated Classification classifications = 2;
+ }
+ 
+ message GeoBoundingPolygon {
+     GeoPolygon polygon = 1;
+     repeated Classification classifications = 2;
+ }
+ 
+ /** A closed polygon defined by the provided vertices (last vertex is connected to the first). */
+ message Polygon {
+     repeated UnitCoordinate vertices = 1;
+ }
+ 
+ /** A closed polygon defined by the provided geo vertices (last vertex is connected to the first). */
+ message GeoPolygon {
+     repeated GeoCoordinate vertices = 1;
+ }
+ 
+ /**
+  * Specifies a location where row and col are specified in unit space [0,1].
+  * Corners have the following UnitCoordinates:
+  *
+  * Upper-Left   row: 0  col: 0
+  * Upper-Right  row: 0  col: 1
+  * Lower-Left   row: 1  col: 0
+  * Lower-Right  row: 1  col: 1
+  */
+ message UnitCoordinate {
+     double row = 1;
+     double col = 2;
+ }
+ 
+ message Classification {
+     /** A pre-agreed identifier that the orchestration system is agnostic to. */
+     string type = 1;
+ 
+     /** Value in the range [0,1] representing how likely the referenced object is the given type. */
+     double confidence = 2;
+ }
+ 
+ /** Square lattice of points representing the intersection of the sensor with the Earth. */
+ message Lattice {
+     message Point {
+         /** Coordinate in the image that corresponds to the given lat, long, and elevation. */
+         UnitCoordinate coordinate = 1;
+ 
+         /** Degrees. Latitude. */
+         double latitude = 2;
+ 
+         /** Degrees. Longitude. */
+         double longitude = 3;
+ 
+         /** Meters. Elevation. */
+         double elevation = 4;
+     }
+ 
+     repeated Point earth_intersection = 1;
+ }
+ 
+ message Velocity {
+     oneof velocity {
+         PixelVelocityVector pixel = 4;
+         /* spatial-velocity support to be added later */
+     }
+ }
+ 
+ message PixelVelocityVector {
+     /** Indicates row-motion in unit pixel-space. Positive values indicate motion to image-right. */
+     double x = 1;
+ 
+     /** Indicates columnar-motion in unit pixel-space. Positive values indicate motion to image-down. */
+     double y = 2;
+ }
+ 
+ message Frame {
+     Image image = 1;
+     UasMetadata uas_metadata = 2;
+ }
+ 
+ message Image {
+     oneof image {
+         Rgb888Image rgb_image = 1;
+         PngImage png_image = 2;
+         TiffImage tiff_image = 3;
+         Bgr888Image bgr_image = 4;
+         Nitf21Image nitf21_image = 5;
+     }
+ }
+ 
+ message Rgb888Image {
+     /** Width of the image in pixels. */
+     int32 width = 1;
+     /** Height of the image in pixels. */
+     int32 height = 2;
+ 
+     /**
+      * The path to an RGB888 image arranged in hwc (height-width-channel) order.
+      *
+      * In order to get the pixel value at row 'r' and column 'c', you would index into the file as follows:
+      *
+      * ```
+      * int rowOffset    = r * width * 3
+      * int columnOffset = c * 3
+      * int pixelIndex   = rowOffset + columnOffset
+      * byte red   = bytes[pixelIndex]
+      * byte green = bytes[pixelIndex + 1]
+      * byte blue  = bytes[pixelIndex + 2]
+      * ```
+      */
+     string path = 3;
+ }
+ 
+ message Bgr888Image {
+     int32 width = 1;
+     int32 height = 2;
+ 
+     /** The path to a BGR888 image arranged in hwc (height-width-channel) order. */
+     string path = 3;
+ }
+ 
+ message PngImage {
+     int32 width = 1;
+     int32 height = 2;
+ 
+     /** The path to a PNG encoded image. */
+     string path = 3;
+ }
+ 
+ message TiffImage {
+     int32 width = 1;
+     int32 height = 2;
+ 
+     /** The path to a TIFF encoded image. */
+     string path = 3;
+ }
+ 
+ message Nitf21Image {
+     /** Path to a NITF 2.1 spec image */
+     string path = 1;
+ }
+ 
+ message DigitalGlobeMetadata {
+     /** DigitalGlobe feature identifier */
+     string feature_id = 1;
+ 
+     /** Source satellite & band: e.g. WV03_VNIR (corresponding to WorldView-3 Visible/Near-Infrared) */
+     string source = 3;
+ 
+     /** National Image Interpretability Rating Scale score. */
+     uint32 niirs = 4;
+ 
+     /** DigitalGlobe product type */
+     string product_type = 6;
+ 
+     /** Degrees within range [0, 90]. Off-nadir angle. Angle measured from nadir to frame center.  */
+     double off_nadir_degrees = 7;
+ 
+     /** Degrees within range [-90, 90]. Angle of sun above horizon. Negative elevation angle indicates nightime image. */
+     double sun_elevation_degrees = 8;
+ 
+     /** Degrees within range [0, 360]. Sun azimuth. */
+     double sun_azimuth_degrees = 9;
+ 
+     /** Scale factor mapping pixel-space to world space, as measured at the center of the frame. */
+     uint64 ground_sample_distance_centimeters = 10;
+ 
+     /** Corner points, in world coordinates */
+     GeoCoordinate top_left = 11;
+     GeoCoordinate top_right = 12;
+     GeoCoordinate bottom_right = 13;
+     GeoCoordinate bottom_left = 14;
+ }
+ 
+ message ProviderMetadata {
+     oneof metadata {
+         DigitalGlobeMetadata digital_globe = 1;
+     }
+ }
+ 
+ /** Subset of the tags from 0601.4, with tag number == protobuf field number. */
+ message UasMetadata {
+     /** Degrees within range [0, 360]. Aircraft heading angle. Relative between longitudinal axis and True North measured in the horizontal plane. */
+     float platform_heading_angle = 5;
+ 
+     /** Degrees within range [-20, 20]. Aircraft pitch angle. Angle between longitudinal axis and horzontal plane. Positive angles above horizontal plane. */
+     float platform_pitch_angle = 6;
+ 
+     /** Degrees within range [-50, 50]. Platform roll angle. Angle between transverse axis and horizontal plane. Positive angles for right wing lowered below horizontal plane. */
+     float platform_roll_angle = 7;
+ 
+     /** Degrees within range [-90, 90]. Sensor Latitude. Based on WGS84 ellipsoid. */
+     double sensor_latitude = 13;
+ 
+     /** Degrees within range [-180, 180]. Sensor Longitude. Based on WGS84 ellipsoid. */
+     double sensor_longitude = 14;
+ 
+     /** Meters within range [-900, 19000]. Altitude of sensor as measured from Mean Sea Level (MSL). */
+     double sensor_true_altitude = 15;
+ 
+     /** Degrees within range [0, 180]. Horizontal field of view of selected imaging sensor. */
+     float sensor_horizontal_fov = 16;
+ 
+     /** Degrees within range [0, 180]. Vertical field of view of selected imaging sensor. */
+     float sensor_vertical_fov = 17;
+ 
+     /** Degrees within range [0, 360]. Relative rotation angle of sensor to platform longitudinal axis. Rotation angle between platform longitudinal axis and camera pointing direction as seen from above the platform. */
+     double sensor_relative_azimuth_angle = 18;
+ 
+     /** Degrees within range [-180, 180]. Relative Elevation Angle of sensor to platform longitudinal-transverse plane. Negative angles down. */
+     double sensor_relative_elevation_angle = 19;
+ 
+     /** Degrees within range [0, 360]. Relative roll angle of sensor to aircraft platform. Twisting angle of camera about lens axis. Top of image is zero degrees. Positive angles are clockwise when looking from behind camera. */
+     double sensor_relative_roll_angle = 20;
+ 
+     /** Image sensor provided name/description. */
+     string image_source_sensor = 21;
+ 
+     /** Metadata associated with the specific frame provider, if not a standard MPEG-TS based source*/
+     ProviderMetadata provider_metadata = 22;
+ }

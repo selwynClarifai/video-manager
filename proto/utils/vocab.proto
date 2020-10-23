@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+import "proto/utils/tag.proto";
+
+
+option go_package = "utils";
+option java_package = "utils";
+
+
+message Vocab {
+  // The vocab for this particular head of the model.
+  // This will load the tag list below dynamically from the API during training.
+  string user_unique_vocab_id = 1;
+  // This is the application id for the vocab. It is also user_unique_id of the app.
+  // If this is not set then it should be assumed this vocab is owned by the caller App.
+  string user_unique_app_id = 2;
+  // This is the user id for the vocab. It is the user_unique_id of the user.
+  // If this is not set then it should be assumed this vocab is owned by the caller User.
+  string user_unique_user_id = 3;
+
+  // We might want to add the vocab_id which would be the primary key of the vocabs table in DB in
+  // the future so field #4 is reserved for that.
+
+  // A stored representation of the list of tags in the vocab.
+  // This is useful for baking into checkpoints the ordered list of tags from the API that was used
+  // during training so that we can deploy a checkpoint without relying on the API.
+  repeated Tag tag = 5;
+}

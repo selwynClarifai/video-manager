@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package clarifai.usage;
+
+option go_package = "usage";
+option java_multiple_files = true;
+option java_package = "com.clarifai.usage";
+option objc_class_prefix = "CAIP";
+
+enum EventType{
+    TYPE_NOT_SET = 0;
+
+    REGULAR_PREDICT = 1;
+    CUSTOM_PREDICT = 2;
+    SEARCH = 3;
+    TRAIN = 4;
+    OTHER = 5;
+}
+
+message EventParam{
+    oneof event{
+        RegularPredictEvent predict = 1;
+        CustomPredictEvent custom_predict = 2;
+        SearchEvent search = 3;
+        TrainModelEvent train = 4;
+        OtherEvent other =5;
+    }
+}
+
+message Model{
+    //Model InternalID
+    string model_id = 1;
+    //Model Type(e.g. concept, cluster, embed, detect-embed etc.)
+    string model_type = 2;
+    //Model owner's InternalID
+    string model_owner_id = 3;
+    //Model Version InternalID
+    string model_version_id = 4;
+}
+
+//RegularPredictEvent is used for predicting only on spire
+message RegularPredictEvent{
+    Model model = 1;
+    string input_media_type = 2;
+}
+
+//CustomPredictEvent is used for predicting on predicor service and the spire
+message CustomPredictEvent{
+    Model model = 1;
+    string input_media_type = 2;
+}
+
+message SearchEvent{
+    string search_type = 1;
+}
+
+message TrainModelEvent{
+    Model model = 1;
+}
+
+message OtherEvent{
+
+}

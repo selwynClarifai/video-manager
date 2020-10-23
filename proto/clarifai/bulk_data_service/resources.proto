@@ -1,0 +1,62 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/api/resources.proto";
+import "proto/clarifai/api/status/status_code.proto";
+
+import "google/protobuf/timestamp.proto";
+
+package clarifai.bulk_data_service;
+
+option go_package = "bulk_data_service";
+option java_multiple_files = true;
+option java_package = "com.clarifai.bulk_data_service";
+option objc_class_prefix = "CAIP";
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/bulk_data_service/data_dump.proto
+////////////////////////////////////////////////////////////////////////////////
+// FIXME(zeiler): this has to be added to the DataDump message right now :(
+message PostDataDumpsRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  // A Search to allow filtering down of the entire app's data dump to be limited to only
+  // the results of this search query. See our search documentation for more details
+  // about the search Query message.
+  clarifai.api.Search search = 2;
+  bool include_embeddings = 3;
+}
+
+message DataDump {
+  // id of the data dump
+  string id = 1;
+  // application ID that this dump was created from
+  string app_id = 2;
+  // the request that was used to generate this data dump
+  PostDataDumpsRequest request = 3;
+  // the s3 path of the dump of data
+  string location = 4;
+  // the status (pending, in-progress, completed, failed) of the data_dump
+  clarifai.api.status.StatusCode status = 5;
+  // user id that created this data dump
+  string created_by = 6;
+
+  // When the data dump was created. We follow the XXXX timestamp
+  // format. We use https://www.ietf.org/rfc/rfc3339.txt format:
+  // "2006-01-02T15:04:05.999999Z" so you can expect results like
+  // the following from the API:
+  // "2017-04-11T21:50:50.223962Z"
+
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp modified_at = 8;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/bulk_data_service/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////

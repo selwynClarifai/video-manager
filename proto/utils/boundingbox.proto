@@ -1,0 +1,32 @@
+// DO NOT USE THIS PROTO for new code.  Use bbox.proto instead.
+
+syntax = "proto3";
+
+import "proto/utils/embedding.proto";
+import "proto/utils/tag.proto";
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+// This proto will be deprecated once we clean up the code
+message BoundingBox {
+  // The tag for this bounding box.
+  // Note(zeiler): this is a repeated Tag so that we can store
+  // predictions for each BoundingBox location.
+  repeated Tag tag = 1;
+  // The top row position. Stored as [0...1.0]
+  float top_row = 3 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The left most column.  Stored as [0...1.0]
+  float left_col = 4 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The bottom row position.  Stored as [0...1.0]
+  float bottom_row = 5 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // The right most column.  Stored as [0...1.0]
+  float right_col = 6 [(clarifai.api.utils.cl_show_if_empty) = true];
+  // If this bounding box is a positive example or not.
+  bool is_positive = 7;
+  // An optional embedding for this bounding box region.
+  repeated Embedding embedding = 8;
+  // An optional track id if tracking is being used
+  int32 track_id = 9;
+}

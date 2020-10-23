@@ -1,0 +1,65 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/sdk_billing/resources.proto";
+import "proto/clarifai/api/status/status.proto";
+import "proto/clarifai/auth/scope/scope.proto";
+import "proto/clarifai/auth/util/extension.proto";
+import "proto/clarifai/commands/commands.proto";
+
+import "google/api/annotations.proto";
+
+package clarifai.sdk_billing;
+
+option go_package = "sdk_billing";
+option java_multiple_files = true;
+option java_package = "com.clarifai.sdk_billing";
+option objc_class_prefix = "CAIP";
+
+service SDKBillingService {
+  // Health Check
+  rpc GetHealthz (GetHealthzRequest) returns (GetHealthzResponse) {
+    option (google.api.http) = {
+            get: "/sdkbilling/healthz"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  // Add a new sdk_billing entry into our database
+  // note(lowjiansheng): not following convention for request formats as this proto definition is being used in many parts of Mobile SDK
+  rpc PostSDKBilling (SDKBilling) returns (SDKBillingResponse) {
+    option (google.api.http) = {
+        post: "/sdkbilling"
+        body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/sdk_billing/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetHealthzRequest {
+}
+
+message GetHealthzResponse {
+  clarifai.api.status.Status status = 1;
+  string time = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/sdk_billing/sdk_billing.proto
+////////////////////////////////////////////////////////////////////////////////
+/*
+ HTTP response message to be sent to SDKs
+*/
+message SDKBillingResponse {
+  clarifai.api.status.Status status = 1;
+  clarifai.commands.Commands commands = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,391 @@
+syntax = "proto3";
+
+import "proto/utils/databatch.proto";
+import "proto/utils/lopq_code.proto";
+import "proto/utils/lopq_service.proto";
+import "proto/utils/ndarray.proto";
+import "proto/utils/request_meta.proto";
+
+option go_package = "lopq";
+option java_package = "lopq";
+
+// Interface exported by the server.
+service LOPQService {
+  // Predicts the LOPQ codes for given embeddings for a LOPQ model
+  rpc LOPQPredict (LOPQPredictRequest) returns (LOPQPredictResponse) {}
+
+  // Searches for embeddings given an optional SQL template to only consider a subset of assets for a LOPQ model
+  rpc LOPQSearch (LOPQSearchRequest) returns (LOPQSearchResponse) {}
+
+  // Searches for embeddings and attributes given a SQL template and custom models to weight results
+  rpc LOPQAttributeSearch (LOPQAttributeSearchRequest) returns (LOPQSearchResponse) {}
+
+  // Searches for embeddings given a LOPQ model returning LOPQ coarse keys and distances only
+  rpc LOPQSearchForCodes (LOPQSearchForCodesRequest) returns (LOPQSearchForCodesResponse) {}
+
+  // Brute force search for nearest neighbors of query embeddings.
+  rpc LOPQBruteForceSearch (LOPQBruteForceSearchRequest) returns (LOPQBruteForceSearchResponse) {}
+
+  // LOPQTrain by iterating over database and then save model to s3.
+  rpc LOPQTrain (LOPQTrainRequest) returns (LOPQTrainResponse) {}
+
+  // Evaluates a LOPQ model by comparing to brute force for a set of sample query embeddings.
+  rpc LOPQTrainAndEval (LOPQTrainAndEvalRequest) returns (LOPQTrainAndEvalResponse) {}
+}
+
+message LOPQPredictRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataExample that has the predict Embedding set already.
+  // It uses the embedding's information to know what base model it came from and retrieve the
+  // corresponding LOPQ model from S3.
+  DataBatch data = 2;
+  // The LOPQ model to use. If empty then it will use the default model defined in
+  // ./conf/spire/spire.yaml for the given model_name that is present in each embedding vector.
+  string lopq_model_name = 3;
+}
+
+message LOPQPredictResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // The LOPQ codes to be indexed into the dataset by the receiving server. They are not indexed
+  // here into the DB because the original data likely includes other information to write along
+  // with these codes to the DB and that is handled elsewhere.
+  repeated LOPQCode code = 2 [deprecated = true];
+  // DataBatch used to store returned LOPQ codes
+  DataBatch results = 3;
+}
+
+
+message LOPQSearchRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataExample with the query embedding set already.
+  DataBatch data = 2;
+  // Search SQL statement. The query comes with %(some_id)s placeholders where some_id associates a
+  // the place-holder with a particular value.
+  // The place-holders are then filled by LOPQ service, an example would be coarse keys associated
+  // with cells so that the database can be queries for that cell.
+  // This also can include any extra filters to select only the desired subset of assets.
+  //
+  // For example in case of visual search the SQL Query in this case should look like this:
+  //
+  // SELECT
+  //   embedding,
+  //   coarse_key,
+  //   asset_id_ck AS asset_id
+  // FROM
+  //   (
+  //     SELECT
+  //       *
+  //     FROM
+  //       (
+  //         (
+  //           SELECT
+  //             embedding,
+  //             asset_id AS asset_id_e
+  //           FROM
+  //             models_assets_embed
+  //           WHERE
+  //             application_id = '' AND model_version_id='bb7ac05c86be42d38b67bc473d333e07'
+  //         ) AS ma_e
+  //         JOIN
+  //         (
+  //           SELECT
+  //             coarse_key,
+  //             projection,
+  //             asset_id AS asset_id_ck
+  //           FROM
+  //             models_assets_cluster
+  //           WHERE
+  //             application_id = '' AND model_version_id='cc73cd06357a469580c2e2a6c03a5553' AND coarse_key = ANY(%(coarse_keys)s)
+  //           ORDER BY
+  //             array_position(%(coarse_keys)s, coarse_key) ASC,
+  //             projection <-> %(projection)s ASC
+  //           LIMIT 1000
+  //         ) AS ma_ck
+  //         ON (ma_e.asset_id_e = ma_ck.asset_id_ck)
+  //       ) AS inner_sub_q
+  //     ORDER BY
+  //       array_position(%(coarse_keys)s) ASC,
+  //       projection <-> %(projection)s ASC
+  //     LIMIT 1000) AS outer_sub_q
+  // ORDER BY
+  //   array_position(%(coarse_keys)s, coarse_key) ASC,
+  //   projection <-> %(projection)s ASC
+  // LIMIT 1000;
+
+  string sql_template = 3;
+  // Number of results to return to the user.
+  int32 k = 4;
+  // Number of coarse results to select in the search process. Here k will always be the number to return
+  // but increasing quota can improve accuracy.
+  int32 quota = 5;
+  // Max number of cells to visit (alternative to max number of assets that "quota" represents.
+  int32 max_visited = 6;
+  // The LOPQ model to use. If empty then it will use the default model defined in
+  // ./conf/spire/spire.yaml for the given model_name that is present in each embedding vector.
+  string lopq_model_name = 7;
+  // If querying using a weight vector (un-normalized floats with positives and negatives) then set
+  // this to True. That will do the relu and unit norm for the LOPQ query, but then use the original
+  // weight for computing logistic regression values.
+  bool weight_query = 8 [deprecated = true];
+
+  // If the sql_template doesn't retrieve quota number of results, then this is a secondary
+  // sql_template to use.
+  string fallback_sql_template = 9;
+
+  // The custom model name to be passed to predictor service.
+  string custom_model_name = 10;
+
+  // Positive and negative concepts IDs for this search. These are typically provided when
+  // we are searching over custom concepts and want the LOPQ service to take predictions
+  // for the concepts into account. This is done by calling predictor service from
+  // LOPQ service directly.
+  repeated string positive_aiids = 11;
+  repeated string negative_aiids = 12;
+}
+
+message ConceptOverride {
+  string id = 1;
+  string name = 2;
+  float value = 3;
+}
+
+message AttributeMixIn {
+  // Custom model name to be used in predictor calls
+  string model_version_id = 1;
+  // Coefficient used to weight this term in distance calculations
+  float mix_in_coefficient = 2;
+  ConceptOverride concept_override = 3;
+}
+
+message LOPQAttributeSearchRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataExample with the query embedding set already.
+  DataBatch data = 2;
+  // SQL query to retrieve asset embeddings from database.
+  string sql_template = 3;
+  // Number of results to return to the user.
+  int32 k = 4;
+  // Number of coarse results to select in the search process. Here k will always be the number to return
+  // but increasing quota can improve accuracy.
+  int32 quota = 5;
+  // Max number of cells to visit (alternative to max number of assets that "quota" represents.
+  int32 max_visited = 6;
+  // The LOPQ model to use. If empty then it will use the default model defined in
+  // ./conf/spire/spire.yaml for the given model_name that is present in each embedding vector.
+  string lopq_model_name = 7;
+  // If the sql_template doesn't retrieve quota number of results, then this is a secondary
+  // sql_template to use.
+  string fallback_sql_template = 8;
+  // List of custom models and coefficents to weight search
+  repeated AttributeMixIn attribute_mix_in = 9;
+}
+
+message LOPQSearchResult {
+  // The asset ID for this specific search result
+  string asset_id = 1;
+
+  // The annotation ID for this specific search result
+  // Note that there might be more than one annotations with same asset ID
+  string annotation_id = 4;
+
+  // A floating point score. Higher score means more related.
+  float score = 2;
+
+  // Euclidean distance to query embedding.
+  // Returned by brute force search.
+  float distance = 3;
+
+  // Matched LOPQ code (cluster)
+  LOPQCode code = 5;
+}
+
+message LOPQSearchResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // Many search results come back.
+  repeated LOPQSearchResult result = 2;
+}
+
+message LOPQSearchForCodesRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // DataExample with the query embeddings set.
+  DataBatch data = 2;
+  // Maximum number of coarse keys to be visited
+  int32 max_visited = 3;
+  // The LOPQ model to use. If empty then it will use the default model defined in
+  // ./conf/spire/spire.yaml for the given model_name that is present in each embedding vector.
+  string lopq_model_name = 4;
+}
+
+message LOPQSearchForCodeResult {
+  // Matched LOPQ code (cluster)
+  LOPQCode code = 1;
+
+  // The pairs of coarse key and distance returned by multi-sequence search algorithm
+  // A floating point score. Higher score means more related.
+  float score = 2;
+
+  // Euclidean distance to query embedding.
+  // Returned by brute force search.
+  float distance = 3;
+}
+
+message LOPQSearchForCodesResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  // Many search results come back.
+  repeated LOPQSearchForCodeResult result = 2;
+}
+
+message LOPQBruteForceSearchRequest {
+  // Data to help with logging requests and marking errors.
+  RequestMeta meta = 1;
+  // DataBatch where each DataExample contains one query embedding. An independent
+  // brute force nearest neighbor search will be performed for each query embedding.
+  DataBatch data = 2;
+  // SQL query yielding rows in form of (id, embedding) to search over.
+  string sql_query = 3;
+  // Number of nearest neighbors to return for each query embedding.
+  int32 k = 4;
+  // Flag to indicate experimental brute force algorithm
+  bool avg_concept_brute_force = 5;
+}
+
+message LOPQBruteForceSearchResponse {
+  // Overall status of the request
+  ResponseStatus status = 1;
+  // Search results for each query embedding.
+  repeated BruteForceResult all_results = 2;
+}
+
+message BruteForceResult {
+  // Nearest neighbors search results for the query embedding.
+  repeated LOPQSearchResult results = 2;
+}
+
+message LOPQTrainRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+
+  oneof training_data {
+    // DataBatch of DataExamples that has Embeddings to be used as training data.
+    DataBatch data = 2;
+    // a SQL query to retrieve the training data. The service will take care of creating a server side
+    // cursor and iterating over the query results.
+    string sql_query = 3;
+  }
+
+  // Unique name to save the trained model to on s3. This service does not check if the model
+  // already exists on s3 and therefore this MUST be unique.
+  string lopq_model_name = 4;
+  // Number of coarse clusters to use (V arg to LOPQModel). If Nothing is passed in it defaults
+  // to 1024.
+  int32 coarse_clusters = 5;
+  // Number of iterations to loop through the sql_query data and train LOPQ model. The minibatch
+  // size is fixed to V*3 (to allow proper initialization of cluster and training).
+  int32 train_iters = 6;
+
+  // When training LOPQ you can borrow from an existing model like the general one
+  // "cc73cd06357a469580c2e2a6c03a5553" to get pca_params and projection_params.
+  string prev_model_name = 7;
+}
+
+message LOPQTrainResponse {
+  // Status to indicate if training result was completed successfully or not.
+  ResponseStatus status = 1;
+}
+
+
+message LOPQModelParams {
+  // Sizes of the dimensions of things.
+  uint32 D = 1;
+  uint32 V = 2;
+  uint32 M = 3;
+  uint32 num_subquantizers = 4;
+
+  repeated NDArray Cs = 5;
+  repeated NDArray Rs = 6;
+  repeated NDArray mus = 7;
+  repeated NDArray subs = 8;
+
+  // If True then the sub-quantizers are not trained and fine codes are not predicted or searched
+  // over, instead the fine part uses the embeddings directly.
+  bool use_embeddings = 11;
+
+  // PCA parameters
+  NDArray pca_P = 9;
+  NDArray pca_mu = 10;
+  // if True then don't actually do PCA but instead just balance according to the permuted_inds.
+  bool pca_just_shuffle = 12;
+  // If using just_shuffle then only shuffle based on these inds. You should take in an embedding
+  // that is in original order and do: embedding[permuted_inds]
+  NDArray pca_permuted_inds = 13;
+
+  // Adding spatial embedding support to project the embeddings down to low dimensions.
+  // That way you can order by a point in the DB to get a defined order within a large collection.
+  uint32 num_point_dims = 14;
+
+  // Projection parameters (random weight OR PCA'd weights) as well as the means for those
+  // dimensions.
+  NDArray projection_P = 15;
+  NDArray projection_mu = 16;
+}
+
+message LOPQTrainAndEvalRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+
+  oneof training_data {
+    // DataBatch of DataExamples that has embeddings to be used as training data.
+    DataBatch data = 2;
+    // A SQL query yielding rows in form of (id, url, annotation, embedding) used for training.
+    // The service will take care of creating a server side cursor and iterating over the query results.
+    string sql_query = 3;
+  }
+
+  // Unique name to save the trained model to on s3. This service does not check if the model
+  // already exists on s3 and therefore this MUST be unique.
+  string lopq_model_name = 4;
+
+  // Number of iterations to loop through the sql_query data and train LOPQ model. The minibatch
+  // size is fixed to V*3 (to allow proper initialization of cluster and training).
+  int32 train_iters = 5;
+
+  // When training LOPQ you can borrow from an existing model like the general one
+  // "cc73cd06357a469580c2e2a6c03a5553" to get pca_params and projection_params.
+  string prev_model_name = 6;
+
+  // Spire to be called to get the predictions.
+  string spire_name = 7;
+
+  // A stringified json containing optional hyper parameters used for training and evaluation.
+  // - int32 coarse_clusters: Number of coarse clusters to use (V arg to LOPQModel).
+  // - repeated int32 k: Rank k's for which all metrics are reported.
+  // - int32 quota: Number of coarse results to select in the search process. Here, k will always
+  //   be the number to return, but increasing quota can improve accuracy.
+  // - int32 max_visited: Max number of cells to visit (alternative to max number of assets that
+  //   "quota" represents).
+  // - float eval_holdout_fraction: What fraction of the training batch size should be hold out for
+  //   evaluation.
+  // - float beta: This determines the weight of precision in the combined f score used to quantify
+  //   relevancy of a single search result. beta < 1 lends more weight to precision, while beta > 1
+  //   favors recall.
+  // - bool substitute_annotation_misses: If set, we will substitute missing annotations with base
+  //   classifier predictions.
+  // - float prob_threshold: We only consider base classifier predictions with a probability larger
+  //   than this threshold.
+  // The default values can be found in py/svc/lopq_searcher/<env>.yaml.
+  string hyper_parameters = 8;
+}
+
+message LOPQTrainAndEvalResponse {
+  // Status to indicate if training result was completed successfully or not.
+  ResponseStatus status = 1;
+  // Evaluation results for each given k
+  repeated LOPQEvalResult result = 2;
+}

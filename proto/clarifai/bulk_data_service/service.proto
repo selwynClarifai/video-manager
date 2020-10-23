@@ -1,0 +1,93 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/bulk_data_service/resources.proto";
+import "proto/clarifai/api/resources.proto";
+import "proto/clarifai/api/status/status.proto";
+import "proto/clarifai/auth/scope/scope.proto";
+import "proto/clarifai/auth/util/extension.proto";
+
+import "google/api/annotations.proto";
+
+package clarifai.bulk_data_service;
+
+option go_package = "bulk_data_service";
+option java_multiple_files = true;
+option java_package = "com.clarifai.bulk_data_service";
+option objc_class_prefix = "CAIP";
+
+/*
+  Note: this is based on the google api format defined here. Please
+  read this before contributing to this file and other *.proto files
+  for the API.
+  https://cloud.google.com/service-management/reference/rpc/google.api#google.api.HttpRule
+ */
+service BulkDataServiceAPI {
+  // Health check
+  rpc GetHealthz (GetHealthzRequest) returns (GetHealthzResponse) {
+    option (google.api.http) = {
+      get: "/bulk-data/healthz"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  rpc PostDataDumps (PostDataDumpsRequest) returns (MultiDataDumpResponse) {
+    option (google.api.http) = {
+      post: "/bulk-data/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/data_dumps"
+      body: "*"
+      additional_bindings {
+        post: "/bulk-data/data_dumps"
+        body: "*"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = KeyAuth;
+    option (clarifai.auth.util.cl_depending_scopes) = All;
+  }
+
+  rpc GetDataDump (GetDataDumpRequest) returns (SingleDataDumpResponse) {
+    option (google.api.http) = {
+      get: "/bulk-data/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/data_dumps/{data_dump_id}"
+      additional_bindings {
+        get: "/bulk-data/data_dumps/{data_dump_id}"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = KeyAuth;
+    option (clarifai.auth.util.cl_depending_scopes) = All;
+  }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/bulk_data_service/data_dump.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetDataDumpRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string data_dump_id = 2;
+}
+
+message SingleDataDumpResponse {
+  clarifai.api.status.Status status = 1;
+  DataDump data_dump = 2;
+}
+
+message MultiDataDumpResponse {
+  clarifai.api.status.Status status = 1;
+  repeated DataDump data_dumps = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/bulk_data_service/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetHealthzRequest {
+}
+
+message GetHealthzResponse {
+  clarifai.api.status.Status status = 1;
+  string time = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+option go_package = "utils";
+option java_package = "utils";
+
+enum ModelFormat {
+  NotSet = 0;
+  TensorFlow = 1;
+  Ambarella = 2;
+  TensorRT = 3;
+  TensorFlowLite = 4;
+  TF_STRAITE = 5;
+  PyTorch = 6;
+}
+
+/*List of dictionaries specifying scope regex patterns to init from
+    checkpoints'
+        load_checkpoint_dicts is a list of dictionaries, each with the keys:
+       * "regex": regular expression to match variable names
+       * "checkpoint" or "eid":  Filename or eid with checkpoint to read
+       * (optional) "checkpoint_regex": regex to match variable names in the checkpoint
+    Each of the regular expressions must have at least one () group, and the groups in
+    "regex" and "checkpoint_regex" are matched against each other to determine which
+    variables should correspond.  In most cases, this means variables will match if
+    the (.*) parts of the regex are the same between the graph variable and checkpoint
+    variable names.
+
+    Examples:
+       * Loads all variables in the graph from variables with exactly the same name
+         in the checkpoint in eid 12345 (if they exist). This is same as load_eid arg. :
+
+            [{'regex': '(.*)',
+              'eid': 12345,
+              }]
+
+         Note: if you don't specify 'regex' it also defaults to '(.*)' so you can compactly use:
+            [{'eid': 12345}]
+
+       * Loads variables in the scope "base_model" from the checkpoint at the given
+         base path.  Used e.g. if the two models match including scope:
+
+            [{'regex': 'base_model/(.*)',
+              'checkpoint':  '/path/to/model.ckpt',
+              #'checkpoint_regex': 'base_model/(.*)' # defaults to same as "regex"
+              }]
+
+       * Loads variables in the scope EXCEPT "Logits" from the checkpoint at the given
+         base path. This is same behaviour as exclude_var_scopes before. This matches any prefix out
+         of the cfg file variable names using:
+           any[var_name.startswith(prefix) for prefix in exclude_prefix]
+         Used e.g. if the two models match including scope:
+
+            [{'regex': '(.*)',
+              'checkpoint':  '/path/to/model.ckpt',
+              'checkpoint_regex': '(.*)',
+              'exclude_prefix': 'Logits'  # everything but logits
+              }]
+
+       * Loads variables in the scope "base_model" from the checkpoint,
+         but where the names in the checkpoint do not contain the "base_model" scope.
+         This means the variable in the graph "base_model/Conv1/weight" takes
+         values from "Conv1/weight" in the checkpoint.  Used e.g. if the checkpoint is
+         a pretrained base model used in part of the current graph model:
+
+            [{'regex': 'base_model/(.*)',
+              'checkpoint':  '/path/to/model.ckpt',
+              'checkpoint_regex': '(.*)',
+              }]
+
+       * First load variables in "base_model" from the checkpoint, then load all variables,
+         if they exist, from the eid 12345, overwriting values if needed.  If a variable
+         matches both the base model checkpoint and eid, the value from the eid (second entry
+         in the list) will be used:
+
+            [{'regex': 'base_model/(.*)',
+              'checkpoint':  '/path/to/model.ckpt',
+              'checkpoint_regex': '(.*)',
+              },
+             {'regex': '(.*)',
+              'eid':  12345,
+              },
+             ]
+*/
+message LoadCheckpointScope {
+
+  oneof source {
+    // The eid to load. This replaces the load_eid arg.
+    int64 eid = 1;
+    // The checkpoint filename to load directly.
+    string checkpoint = 2;
+    ModelBytes model_bytes = 7;
+  }
+  // The regular expression to use for filling which variables form
+  // this LoadCheckpointScope. This parses tf.all_variables() to get
+  // the list and will only set parameters for ones matching
+  // this regex.
+  string regex = 3;
+  // The regular expression to use for reading which variables from
+  // the specific source.
+  string checkpoint_regex = 4;
+  // A string regex to exclude variable scopes. This will skip things
+  // from the graph (not the checkpoint). For exmaple '^fc_layers'
+  // will ignore any of the fc_layers prefixed variables when trying
+  // to load this LoadCheckpointScope.
+  string exclude_regex = 5;
+
+  // If True then it won't be an exception when variables couldn't be
+  // loaded from any of the scopes.
+  bool skip_missing = 6;
+}
+
+message ModelBytes {
+  bytes frozen_meta_graph = 1;
+  bytes mmapped_graph_def = 2;
+  ModelFormat model_format = 3;
+  // Store pytorch models as serialized TorchScript traces or script
+  // for a specific device type ('cpu' or 'cuda') and a model_module for
+  // input preprocessing and output format definitions
+  bytes serialized_trace = 4;
+  // A string used to keep track of what device the model was traced on ('cpu' or 'cuda')
+  string device_type = 5;
+  // A string corresponding to the name of the module with the definitions for
+  // input preprocessing and output format
+  string model_module = 6;
+}

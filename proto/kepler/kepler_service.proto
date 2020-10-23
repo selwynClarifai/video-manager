@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "proto/kepler/kepler.proto";
+
+package kepler_clarifai;
+
+service KeplerService {
+  rpc GetStatus (GetStatusRequest) returns (GetStatusResponse) {}
+  rpc ProcessFrameBundle (FrameBundle) returns (Response) {}
+}
+
+message GetStatusRequest {
+}
+
+message GetStatusResponse {
+  Status status = 1;
+  string state = 2;
+}
+
+message Response {
+  Status status = 1;
+  repeated Region regions = 2;
+}

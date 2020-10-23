@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message GeoPoint {
+  float longitude = 1 [(clarifai.api.utils.cl_show_if_empty) = true];
+  float latitude = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+message Geo {
+  GeoPoint geo_point = 1;
+}

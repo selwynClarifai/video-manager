@@ -1,0 +1,17 @@
+syntax = 'proto3';
+
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+
+// Represents a 2D or 3D point.  The x,y fields will always be present but the z field will only be present if set.
+message Point {
+  float x =  1 [(clarifai.api.utils.cl_show_if_empty) = true];
+
+  float y = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+
+  float z = 3 ;
+}
+

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "proto/utils/ndarray.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Audio {
+  // Optional name for the audio
+  string name = 1;
+
+  // Data can come in one of three forms.
+  oneof data {
+    // Encoded bytes of the array (WAV, MP3, FLAC, etc.).
+    bytes encoded_bytes = 2;
+    // Stored as ndarray array already decompressed.
+    NDArray ndarray = 3;
+    // Decoded bytes of the array (1D sequence of integers)
+    bytes decoded_bytes = 5;
+  }
+  // Url of audio before downloaded.
+  string url = 4;
+}

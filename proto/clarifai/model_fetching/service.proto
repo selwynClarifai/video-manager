@@ -1,0 +1,101 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/model_fetching/resources.proto";
+import "proto/clarifai/analytics/resources.proto";
+import "proto/clarifai/api/status/status.proto";
+import "proto/clarifai/auth/scope/scope.proto";
+import "proto/clarifai/auth/util/extension.proto";
+
+import "google/api/annotations.proto";
+
+package clarifai.model_fetching;
+
+option go_package = "model_fetching";
+option java_multiple_files = true;
+option java_package = "com.clarifai.model_fetching";
+option objc_class_prefix = "CAIP";
+
+service ModelFetchingService {
+  // Health Check
+  rpc GetHealthz (GetHealthzRequest) returns (GetHealthzResponse) {
+    option (google.api.http) = {
+      get: "/model-fetching/healthz"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+  rpc PostSearchModelInfo (PostSearchModelInfoRequest) returns (PostSearchModelInfoResponse) {
+    option (google.api.http) = {
+      post: "/model-fetching/models/{model_id}/versions/{version_id}/search"
+      body: "*"
+      additional_bindings {
+        post: "/model-fetching/models/{model_id}/search"
+        body: "*"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = KeyAuth;
+    option (clarifai.auth.util.cl_depending_scopes) = All;
+  }
+  rpc FetchModel (FetchModelRequest) returns (FetchModelResponse) {
+    option (google.api.http) = {
+      post: "/model-fetching/models/{model_info.model_id}/versions/{model_info.model_version_id}/fetch"
+      body: "*"
+      additional_bindings {
+        post: "/model-fetching/models/{model_info.model_id}/fetch"
+        body: "*"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = KeyAuth;
+    option (clarifai.auth.util.cl_depending_scopes) = All;
+  }
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/model_fetching/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetHealthzRequest {
+}
+
+message GetHealthzResponse {
+  clarifai.api.status.Status status = 1;
+  string time = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/model_fetching/model_fetching.proto
+////////////////////////////////////////////////////////////////////////////////
+message FetchModelRequest {
+    string id = 1;
+    ModelInfo model_info = 2;
+    string public_key = 3;
+    bytes signature = 4;
+}
+
+message FetchModelResponse {
+    clarifai.api.status.Status status = 1;
+    bytes encrypted_bytes = 2;
+    string public_key = 3;
+    bytes signature = 4;
+}
+
+message PostSearchModelInfoRequest {
+    clarifai.analytics.DeviceInfo device_info = 1;
+    clarifai.analytics.HostAppInfo host_app_info = 2;
+    clarifai.analytics.OperatingSystem operating_system = 3;
+    clarifai.analytics.SDK sdk = 4;
+    string model_id = 5;
+    string version_id = 6;
+}
+
+message PostSearchModelInfoResponse {
+    clarifai.api.status.Status status = 1;
+    ModelInfo model_info = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

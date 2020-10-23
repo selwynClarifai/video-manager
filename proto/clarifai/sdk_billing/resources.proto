@@ -1,0 +1,47 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/analytics/resources.proto";
+
+package clarifai.sdk_billing;
+
+option go_package = "sdk_billing";
+option java_multiple_files = true;
+option java_package = "com.clarifai.sdk_billing";
+option objc_class_prefix = "CAIP";
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/sdk_billing/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Messages from /proto/clarifai/sdk_billing/sdk_billing.proto
+////////////////////////////////////////////////////////////////////////////////
+/*
+    SDK Billing Cycle defines which year and month is associated with the billing data
+*/
+message SDKBillingCycle {
+  uint32 year = 1; // Year of the billing
+  uint32 month = 2; // Month of the billing
+}
+
+/*
+  SDK Billing is how an SDK informs the cloud about its usage during that period.
+*/
+message SDKBilling {
+  string batch_unique_identifier = 1; // Unique identifier for this data packet, in order to avoid duplicates on the server side
+  clarifai.analytics.DeviceInfo device_info = 2;
+  SDKBillingCycle cycle = 3;
+  clarifai.analytics.HostAppInfo host_app_info = 4;
+  clarifai.analytics.OperatingSystem operating_system = 5;
+  clarifai.analytics.State state = 6;
+  string system_uuid = 7; // System unique identifier for the combination user + device
+  clarifai.analytics.SDK sdk = 8;
+}
+
+////////////////////////////////////////////////////////////////////////////////

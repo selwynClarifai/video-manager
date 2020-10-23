@@ -1,0 +1,237 @@
+syntax = "proto3";
+
+import "proto/utils/databatch_generator.proto";
+import "proto/utils/data_provider.proto";
+import "proto/utils/checkpoint.proto";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+// This stores config options for training with tf_striate and other toolkits we support.
+message TrainConfig {
+  // parameters for setting up the experiment
+  ExpInfo exp_info = 1;
+  // defines the frequency of model testing, saving, printing of stat summaries, and tensorboard summaries.
+  Freqs freqs = 2;
+  // configuration for defining learning rate decay
+  Lrate lrate = 3;
+  // parameters regarding the dataset and architecture of the model.
+  DataParams data_params = 4;
+  // the name of the config runner job this train config is being run in
+  string job_name = 5;
+  // flag, if True then we clip gradient to range [-gradient_max, gradient_max]
+  bool clip_gradient = 6;
+  // by default we set it to 1.0, so that if we set clip_gradient=True, we clip gradients to [-1.,1.] by default
+  float gradient_max = 7;
+}
+
+// Parameters regarding experiment setup information.
+message ExpInfo {
+  // Experiment Id -1 uses get_next_eid.What you put here depends
+  // greatly on the exp_type that you are running: train: -1 will give you a
+  // new eid, a # here will will continue training from that eid. predict:
+  // the eid of output predictions/stats reconstruct: the eid of the model
+  // you want to use. server: the eid of the model you want to use.
+  int64 eid = 1;
+
+  // See docs for LoadCheckpointScope
+  repeated LoadCheckpointScope load_checkpoint_scopes = 2;
+
+  // Experiment Type: there are multiple different types of experiments
+  // supported:train: this trains a new model if eid == -1 or continues  '
+  // training an existing model if eid > 0.predict: using a trained model at
+  // the given eid  we rund fprop to predict outputs. reconstruct: old
+  // method of reconstructing to visualize  what a model has learned.
+  // server: this is used in the API to configure many different  options
+  // for saving jobs, logging, etc. then essentially  does the same as
+  // predict. replay_train: this is a little more complicated. This
+  // continues training from and existing model, but only  from a certain
+  // layer upwards. You msut set the  saved_output_eid to specify where
+  // saved_output files  are from a previous predict run. Then the --eid arg
+  // specifies a model to rip some layers off of and to  set to
+  // re-initialize form the --cfg settings.
+  // choices=['train', 'replay_train']
+  string exp_type = 3;
+
+  // Type of trainer from tf_striate to tf_models. tf_striate is our
+  // wrapper around tensorflow to run arbitrary configs in
+  // conf/tf_striate/tf_config while tf_models is tensorflow_models repo
+  // checked out for object detection.
+  string trainer_type = 4;
+
+  // Evaluation runner arguments. See trainer_evaluation.TrainerEvaluation.
+  // To handle arbitrary json metadata you can use a struct field:
+  // https://github.com/google/protobuf/blob/master/src/google/protobuf/struct.proto
+  repeated EvalConfig evaluation = 5;
+
+  // The type of device to use for computation.
+  string device_type = 6;
+
+  // The number of gpus to use for tensorflow.
+  int32 num_devices = 7;
+
+  // The random seed for numpy.
+  int64 seed = 8;
+
+  // Just a note to keep track of runs. This is useful for  searching
+  // through experiments afterwards.
+  string note = 9;
+
+  // Email address to mail job status (default git email)
+  string email = 10;
+
+  // The number of epoch you want to train
+  int64 num_epoch = 11;
+
+  // The number of minibatch you want to train(num*1000).
+  int64 num_minibatch = 12;
+
+  // The git hash of this experiment.
+  string git_hash = 13;
+
+  // When running in a celery worker this is set to True
+  bool is_celery = 14;
+
+  // If running in queued mode (is_celery=True), can run evals inline or on
+  // evals queue
+  // Default is to queue evals when running in celery (run_evals_inline=False)
+  bool run_evals_inline = 15;
+
+  // Whether to run evals at the very end of training, for the final checkpoint
+  // Default is True (set by parser)
+  bool run_final_evals = 16;
+}
+
+message EvalConfig {
+  // This is the class tha TrainEvaluationSetup.Runner() will resolve
+  // for you.
+  string config_runner_class = 1;
+  // This is left as a random config in order to support arbitrary
+  // fields passed to the evaluators.
+  google.protobuf.Struct config = 2;
+}
+
+// Parameters regarding the dataset and architecture of the model.
+message DataParams {
+  // The parameter file to load. This is used to start a new
+  // training run. See the ./config/
+  // directory for all .py model builder names.
+  string cfg = 1;
+
+  // Additional keyword arguments to pass into setup_graph in your cfg.
+  // Or you can pass in things like logreg:0,passthrough:1 ,...as a string
+  // to be parsed as a dictionary.'
+  // To handle arbitrary json metadata you can use a struct field:
+  // https://github.com/google/protobuf/blob/master/src/google/protobuf/struct.proto
+  //
+  // Example: To use Struct from Python use ParseDict
+  //
+  //   from proto.utils.common import ParseDict
+  //   ParseDict({
+  //        'logreg': logreg,
+  //        'data_format': 'NCHW',
+  //        }, args.data_params.cfg_args)
+  //
+  //   Then to read this you can access keys as:
+  //   args.data_params.cfg_args['key'] = value
+  //
+  //   To convert to dict:
+  //   from proto.utils.common import MessageToDict
+  //
+  //
+  // See more docs here:
+  // https://developers.google.com/protocol-buffers/docs/reference/python-generated#struct
+  google.protobuf.Struct cfg_args = 2;
+
+  // Additional args to pass into setup_inputs() in your cfg.
+  google.protobuf.Struct input_args = 3;
+
+  // Additional args to pass into setup_optimizer() in your cfg.
+  google.protobuf.Struct optimizer_args = 4;
+
+  // The dataset to use.
+  string dataset = 5;
+
+  // The eid where predict was run to generate saved_outputfiles to
+  // use as a data source. NOTE: you now need toalso always specify a
+  // dataset. If you sepcify a blank dataset (ie. '') then it will use
+  // the one specified in the saved_output file names.
+  int64 saved_output_eid = 6 [deprecated = true];
+
+  // The layer name of where to connect saved_output when using
+  // 'saved_output' or 'replay_train' (which defaults to 'saved_output'
+  // for the dataset).
+  string data_layername = 7 [deprecated = true];
+  string test_data_layername = 8 [deprecated = true];
+
+  // All the config params for the data_provider.py preprocessing.
+  DataProviderParams data_provider_params = 9;
+
+  DataBatchGeneratorParams databatch_generator_params = 10;
+
+  // This is no longer used in our code.
+  string predict_split = 100 [deprecated = true];
+}
+
+message Freqs {
+
+  // How often should I test the model in terms of epochs
+  int64 test_freq = 1;
+
+  // How often should I save the checkpoint file in terms of data batches.
+  int64 save_freq = 2;
+
+  // How often should I print summary of stats in terms of data batches.
+  int64 stats_freq = 3;
+
+  // How often should I write summaries for tensorboard in terms of mini batches.
+  int64 summary_freq = 4;
+}
+
+message LratePair {
+  float epoch = 1;
+  float lrate = 2;
+}
+
+// Config for learning rate specification.
+message Lrate {
+  // Learning rates schedule; a string 'start_ep:lr,...' which will be a
+  // list of tuples in python:
+  // [(start_ep1, lrate1), (start_ep2, lrate2)...]
+  // This is used for piecewise_constant learning_rate_decay.
+  repeated LratePair lrate_schedule = 1;
+  // If you want to use polynomial decay then you can use specify that here.
+  LratePolynomialDecayConfig polynomial_config = 2;
+}
+
+message LratePolynomialDecayConfig {
+  // This is specified here in tensorflow:
+  // https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/training/learning_rate_decay.py
+  float init_learning_rate = 1;
+  int64 decay_steps = 2;
+  float ending_learning_rate = 3;
+  float power = 4;
+  bool cycle = 5;
+}
+
+
+message ModelProfileResults {
+  // stats from host at the time profiling ran
+  string hostname = 1;
+  google.protobuf.Timestamp created_at = 2;
+  string device_descriptions_json = 3;
+  repeated float host_load_averages = 4;
+
+  // loop timers, total and per-example averages
+  map<string, double> times_total = 10;
+  map<string, double> times_per_example = 11;
+
+  // tf profiles and timeline file contents
+  string tf_profile_timing = 20;
+  string tf_profile_flops = 21;
+  string tf_timeline = 22;
+}
+

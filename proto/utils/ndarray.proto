@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message NDArray {
+  // The bytes of data from the array from array.tostring()
+  // You can reconstruct the array with np.fromstring(NDArray.data).
+  bytes data = 1;
+
+  // Simply the shape of the numpy array. array.shape.
+  repeated uint32 shape = 2;
+
+  // Dtype for numpy. You can get it back from this string format using:
+  // np.dtype('float32') for example.
+  // To get this string out of an array: array.dtype.name is used.
+  string dtype = 3;
+}

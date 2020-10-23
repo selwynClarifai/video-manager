@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option go_package = "evaluation";
+
+// Detection evaluation proto
+message DetectionEvalResult {
+  double mean_average_precision_iou_50 = 1;
+  double mean_average_precision_iou_range = 2;
+
+  repeated DetectionEvalSubset subsets = 3;
+}
+
+message DetectionEvalSubset {
+  // if restricted to a range of area
+  string area_range_name = 2;
+  double area_min = 3;
+  double area_max = 4;
+
+  // if restricted to a class
+  string concept_name = 6;
+  string concept_id = 7;
+
+  // iou threshold used to calculate box overlaps
+  float iou = 8;
+
+  // eval results
+  double mean_average_precision = 9; // mAP if no class restriction
+  double class_average_precision = 10; // AP for this class (flat empirical if overall)
+  repeated float score_thresholds = 11;
+  repeated float precision = 12;
+  repeated float recall = 13;
+  repeated float tp_rate = 14;
+  repeated float fp_rate_per_image = 15;
+  repeated float fp_rate_per_object = 16;
+  int64 num_gt_boxes = 17;
+};

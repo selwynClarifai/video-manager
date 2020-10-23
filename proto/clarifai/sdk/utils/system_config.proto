@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+package clarifai.sdk.utils;
+
+option go_package = "sdk.utils";
+option java_multiple_files = true;
+option java_package = "com.clarifai.sdk.utils";
+option objc_class_prefix = "CAIP";
+
+enum NetworkConstraint {
+  NONE = 0;
+  WIFI_ONLY = 1;
+}
+
+/*
+  SDK System Config defines a set of sdk preferences or configurations.
+*/
+message SystemConfig {
+  google.protobuf.Timestamp discard_data_timestamp = 1;
+  google.protobuf.Timestamp do_not_sync_until = 2;
+  google.protobuf.Duration authentication_interval = 3;
+  google.protobuf.Duration batch_upload_interval = 4;
+  NetworkConstraint network_constraint = 5;
+  string system_uuid = 6;
+  uint32 launch_count = 7;
+  google.protobuf.Timestamp last_authentication_time = 8;
+  google.protobuf.Timestamp last_batch_upload_time = 9;
+  google.protobuf.Duration billing_interval = 10;
+  google.protobuf.Timestamp last_billing_time = 11;
+}

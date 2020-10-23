@@ -1,0 +1,67 @@
+syntax = 'proto3';
+
+option go_package = "utils";
+option java_package = "utils";
+
+// Inspired by striate and tensorflow computation graphs:
+// https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/framework/graph.proto
+
+// WorkflowGraph is an exhaustive list of connected WorkflowNodes.
+message WorkflowGraph {
+  // A list of workflowNode for this workflow graph
+  repeated WorkflowNode node = 1;
+  // A list of WorkflowRecipe for this workflow graph
+  repeated WorkflowRecipe recipe = 2 [deprecated = true];
+  // Hints on how the workflow should be computed (if any)
+  repeated WorkflowComputationHint hint = 5;
+}
+
+// A (versioned) model to be run in this workflow
+message ModelVersion {
+  // The id for the model to run
+  string model_id = 1;
+  // The specific model version to run. This will fail if no version_id is specified.
+  string version_id = 2;
+}
+
+message WorkflowNode {
+  // A id for this node in the workflow. This has to be unique within a WorkflowGraph.
+  string id = 1;
+  // The specific (versioned) model for this node
+  ModelVersion model_version = 2;
+  // A list of WorkflowInput for this node. If there are no inputs then inputs are assumed to be
+  // the input to the entire workflow when you call /workflows/:id/outputs.
+  repeated WorkflowInput input = 3;
+  // A display name for this workflow node
+  string display_name = 4;
+  // Use this to group nodes that are going to be computed together
+  string group_id = 5;
+  // Setting this flag hides this node from end user
+  bool hidden = 6;
+}
+
+// WorkflowInput represents inputs to a node of the graph.
+message WorkflowInput {
+  // The id to a connected WorkflowNode which will be used as an input for current WorkflowNode.
+  string node_id = 1;
+  // The output type of above connected WorkflowNode. This needs to match a valid model output.
+  string output = 2;
+}
+
+// WorkflowComputationHint is a placeholder for any hints you want to convey regarding the nodes when
+// we compute the values
+message WorkflowComputationHint {
+  // Id for the node this hint is referencing to
+  string node_id = 1;
+  // Hints that the node has been already computed and the result has been persisted
+  bool already_predicted = 2;
+}
+
+message WorkflowRecipe {
+  string id = 1;
+  string op = 2;
+  string display_name = 3;
+  repeated string node_ids = 4;
+  repeated WorkflowComputationHint hint = 5;
+  bool default = 6;
+}

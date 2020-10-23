@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+import "proto/utils/data_provider.proto";
+import "proto/utils/pasting_data_provider.proto";
+
+option java_package = "utils";
+
+message DataBatchGeneratorParams {
+
+  oneof generator {
+    ImageDatasetReaderParams image_dataset_reader_params = 1;
+    SavedOutputReaderParams saved_output_reader_params = 2;
+    DataBatchSamplerParams databatch_sampler_params = 3;
+    gRPCDataBatchReaderParams grpc_databatch_reader_params = 4;
+    PastingDataProviderParams pasting_data_provider_params = 5;
+  }
+
+  int32 databatch_size = 100;
+  int32 num_threads = 101;
+}
+
+message DatasetReaderParams {
+  string dataset = 1;
+  string split = 2;
+
+  bool shuffle = 3;
+  bool continuous = 4;
+  bool strip_empty = 5;
+  
+  // if set to true, data_example.dataset_name will be stamped with dataset_name accordingly
+  // by default it is set to False, currently this field is only set to True in domain transfer runners.
+  bool set_dataset_name = 6;
+}
+
+message ImageDatasetReaderParams {
+  DatasetReaderParams dataset_reader_params = 1;
+
+  bool fetch_from_urls = 2;
+}
+
+message SavedOutputReaderParams {
+  DatasetReaderParams dataset_reader_params = 1;
+
+  int32 saved_output_eid = 2;
+  string layer_name = 3;
+
+  bool load_orig_databatch = 4;
+}
+
+message DataBatchSamplerParams {
+  repeated DataBatchGeneratorParams databatch_generator_params = 1;
+  bool deterministic = 2;
+  repeated float sample_rate = 3;
+  repeated LabelMapper label_mapper = 4;
+}
+
+message gRPCDataBatchReaderParams {
+  DataBatchGeneratorParams databatch_generator_params = 1;
+}

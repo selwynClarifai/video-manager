@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+import "proto/spire/spire.proto";
+import "proto/utils/data_example.proto";
+import "proto/utils/databatch.proto";
+
+option go_package = "spire";
+
+// Interface exported by the server.
+service SpireService {
+  // Means the net is set and already initialized (jitted).
+  // This replaces is_ready and is_started which were always confusing.
+  rpc SpireGetState (SpireGetStateRequest) returns (SpireGetStateResponse) {}
+
+  // Predict given a trained model and embeddings from some examples
+  rpc SpireGetConfig (SpireGetConfigRequest) returns (SpireGetConfigResponse) {}
+
+  // Sets the spire config into the net and re-JITs with the new model.
+  rpc SpireSetConfig (SpireSetConfigRequest) returns (SpireSetConfigResponse) {}
+
+  // If the net is not JIT initialized then do it now.
+  rpc SpireMaybeJIT (SpireMaybeJITRequest) returns (SpireMaybeJITResponse) {}
+
+  // Tell the net to stop serving which shutdowns the spire neural net and flushes the socket.
+  rpc SpireStopServing (SpireStopServingRequest) returns (SpireStopServingResponse) {}
+
+  // This does 'tag' and 'embed' ops on the image or any combination of them.
+  rpc SpireEmbedTag (SpireEmbedTagRequest) returns (SpireEmbedTagResponse) {}
+
+  // Get the saved outputs from the neural network.
+  rpc SpireSavedOutput (SpireSavedOutputRequest) returns (SpireSavedOutputResponse) {}
+
+  // This does face detection then does 'tag' and 'embed' ops on the image or any combination of
+  // them.
+  rpc SpireFaceDetectEmbedTag (SpireFaceDetectEmbedTagRequest) returns (SpireFaceDetectEmbedTagResponse) {}
+
+  // Face and object detection in a single endpoint.
+  rpc SpireDetectEmbedTag (SpireDetectEmbedTagRequest) returns (SpireDetectEmbedTagResponse) {}
+
+  // New detection based methods.
+  rpc SpireDetect (SpireDetectRequest) returns (SpireDetectResponse) {}
+
+  // New track based methods
+  rpc SpireTrack (DataExample) returns (DataBatch) {}
+
+  rpc SpireInstanceSegment (SpireInstanceSegmentRequest) returns (SpireInstanceSegmentResponse) {}
+
+}

@@ -1,0 +1,48 @@
+syntax = "proto3";
+import "google/protobuf/duration.proto";
+
+import "proto/utils/ndarray.proto";
+import "proto/utils/frame.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Video {
+  // Optional name for the video.
+  string name = 1;
+  // Data can come in one of two forms.
+  oneof data {
+    // Encoded bytes of the array (MP4, etc.).
+    bytes encoded_bytes = 2;
+    // Stored as ndarray array already decompressed.
+    NDArray ndarray = 3;
+  }
+  // URL of video, which can be the one provided or hosted in S3.
+  string url = 4;
+
+  // Set of frames sampled at some fps - RGB frames.
+  repeated Frame frames = 5;
+  // Set of frames sampled at some fps - x component optical flow.
+  repeated Frame optical_flow_x = 6;
+  // Set of frames sampled at some fps - y component optical flow.
+  repeated Frame optical_flow_y = 7;
+
+  // Specific frame used as thumbnail, which is currently frame at position of 1s.
+  // NOTE(Janvier): Once frames are populated by MediaProcessorProcessVideo, replace this with an
+  // index of which frame the thumbnail comes from.
+  Frame thumbnail = 8;
+
+  // URL of hosted version of video.
+  string hosted_orig_url = 9;
+
+  // Optional width arg.
+  int32 width = 1000;
+  // Optional height arg.
+  int32 height = 1001;
+  // Optional color plans in the video.
+  int32 colors = 1002;
+  // Optional duration of the video: https://github.com/google/protobuf/issues/169.
+  google.protobuf.Duration duration = 1003;
+  // Optional frames per second of the video.
+  float fps = 1004;
+}

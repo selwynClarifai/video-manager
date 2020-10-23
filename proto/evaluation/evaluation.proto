@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+import "proto/predictor/predictor_metrics.proto";
+import "proto/evaluation/classification.proto";
+import "proto/evaluation/detection.proto";
+import "proto/evaluation/ocr.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "evaluation";
+
+// Evaluations main proto
+message EvaluationResult {
+  enum Kind {
+    INVALID = 0;
+    CLASSIFICATION = 1;
+    DETECTION = 2;
+    OCR = 3;
+  };
+
+  string eid = 1;
+  int64 training_epoch = 2;
+  int64 training_step = 3;
+
+  string eval_dataset_name = 4;
+  string eval_dataset_split = 5;
+
+  google.protobuf.Timestamp created_at = 6;
+
+  Kind kind = 10;
+
+  ClassificationEvalResult classification = 11;
+  DetectionEvalResult detection = 12;
+  OCREvalResult ocr = 13;
+  MulticlassMetrics eval_metrics = 14;
+}
+

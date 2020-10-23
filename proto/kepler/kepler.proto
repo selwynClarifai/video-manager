@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package kepler_clarifai;
+
+//=================
+
+// --
+// Area of interest from full-frame image sent by Kepler cameras.
+// Currently follows hand detection.
+message BoundingBox {
+  float minX = 1;
+  float minY = 2;
+  float width = 3;
+  float height = 4;
+}
+
+// --
+// Wrapper for bounding boxes corresponding to the left
+// and right hands of subjects in the camera frames.
+message Hands {
+  BoundingBox left = 1;
+  BoundingBox right = 2;
+}
+
+// --
+// Output from the action recognition model, corresponding
+// to the specific gestures below.
+message GesturesProbabilities {
+  float none = 1;
+  float cartRetract = 2;
+  float reach = 3;
+  float noData = 4;
+  float retract = 5;
+  float cartReach = 6;
+}
+
+// --
+// Output from the action recognition model, corresponding
+// to the specific activities below.
+// Activities are the triggers for sending frames to the
+// product recognition service.
+message ActivityProbabilities {
+  float cartPutdown = 1;
+  float none = 2;
+  float shelfPutdown = 3;
+  float cartPickup = 4;
+  float shelfPickup = 5;
+}
+
+// --
+// Wraps the gesture associated with a frame, along with the
+// predicted gesture for that Frame.
+message Gesture {
+  GesturesProbabilities probabilities = 1;
+  string prediction = 2;
+}
+
+// --
+// Wraps the activity associated with a frame, along with the
+// predicted activity for that Frame.
+message Activity {
+  ActivityProbabilities probabilities = 1;
+  string prediction = 2;
+}
+
+// --
+// The actual image frame as processed by the action recognition model.
+message Frame {
+  int64 sequence = 1;             // -- Frame number assigned by the action client as it processes
+                                  // the frames. It is the frame number seen by the client since
+                                  // the client was started. So, if the client restarts this number resets.
+  bytes image = 2;                // -- The actual image bytes. RGB24 format (Uncompressed RGB 3 x 8-bit),
+                                  // may require encoding to JPEG/PNG or whatever
+                                  // format is required by the consuming service.
+  bool hasObject = 3;             // -- Field for potential object detection result.
+  Hands hands = 4;                // -- The Hands, or BoundingBoxes.
+  Gesture gesture = 5;            // -- The Gesture for this particular frame.
+  int64 timeStamp = 6;            // -- UTC milliseconds.
+  bytes imageJpg = 8;             // -- Frame as jpeg bytes; about 1/2 size of uncompressed 8-bit rgb.
+}
+
+// --
+// Wrap and send multiple surrounding frames along with the activity frame
+// when an activity is recognized.
+message FrameBundle {
+  int64 sequence = 1;             // -- The action client frame number associated with the target Activity.
+  int64 timestamp = 2;            // --
+  int32 size = 3;                 // -- Number of Frames in this bundle.
+  repeated Frame frames = 4;      // --
+  string cameraId = 5;            // -- The camera from which these frames are being sent.
+  Activity activity = 6;          // -- The associated triggering Activity.
+  int32 width = 7;                // -- The width, in pixels, of this camera/setting.
+  int32 height = 8;               // -- The height, "
+  int32 channels = 9;             // -- The number of color channels in these Frames.
+  string storeId = 10;            // -- The store from which these frame occurred.
+  string id = 11;                 // -- The id used to reference these Frames in blob storage.
+  bytes video = 12;               // -- The Frames in this bundle as a h264-encoded video clip.
+                                  // This allows for sending a lot less data for every recognized Activity.
+                                  // This will be a big deal when dealing the with number of Activities
+                                  // that will be generated from a live store.
+}
+
+//=====================
+
+message Status {
+  bool ok = 1;                    // -- Camera and service functioning properly.
+  uint32 errorCode = 2;           // -- Changed to camel case from underscores
+                                  // to be consistent. From https://developers.google.com/protocol-buffers/docs/style
+                                  // underscores appear to be preferred for fields.
+  string msg = 3;                 // -- String description of errorCode.
+}
+
+//=====================
+
+message Sku {
+  string upc = 1;
+}
+
+message Product {
+  Sku sku = 1;                    // -- The Sku, as found in Walmart planogram data.
+  string label = 2;               // -- The label used for the product when trained in the product recognition service.
+  float probability = 3;          // -- The probability associated with this inference.
+}
+
+message Region {
+  int32 bBoxId = 1;               // 1==frame.hands.left, 2==frame.hands.right
+  repeated Product products = 2;  // -- The inferences
+}

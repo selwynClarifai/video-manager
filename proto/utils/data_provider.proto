@@ -1,0 +1,540 @@
+syntax = "proto3";
+/*
+  This is the various parameters we can configure
+  datasets/data_provider.py and other data providers with. You can use
+  it in the parser.
+
+  This is used to pass parameters from your runner into the data
+  provider. We have made this a proto to ensure consistency and list
+  out all the possible parameters.
+
+  To use, put into your runner the following:
+
+  Example:
+
+    from proto.utils.common import json_format
+    from proto.utils.data_provider_pb2 import *
+
+    # Here we set the data_provider params to a python dict from the proto.
+    args.data_provider_params = json_format.MessageToDict(
+        DataProviderParams(...), preserving_proto_field_name=True)
+
+  Compile:
+    # This will compile just this one proto if you want faster compile
+  times. The run_proto_build.sh will connect to dockerhub and pull
+  in a docker image with protoc in order to compile so you don't have
+  to worry about building protoc on your machine.
+    ./proto/run_proto_build.sh proto/utils/data_provider.proto
+
+ */
+option go_package = "utils";
+option java_package = "utils";
+
+message DataProviderParams {
+  // For threading, skipping empties, and other general params.
+  ProcessingParams processing_params = 1;
+
+  // Things like crop_size, downsample_size, crop_type, etc.
+  ImageCropTransform image_crop_transform = 2 [deprecated = true];
+
+  SavedOutputParams saved_output = 3 [deprecated = true];
+  repeated MultiDataset multi_dataset = 4 [deprecated = true];
+  repeated LabelSetter label_setter = 5 [deprecated = true];
+  repeated LabelMapper label_mapper = 6 [deprecated = true];
+
+  LabelSmoother label_smoother = 7 [deprecated = true];
+  LabelDropper label_dropper = 8 [deprecated = true];
+  MaxNumLabelDropper max_num_label_dropper = 9 [deprecated = true];
+  LabelWeight label_weight = 10 [deprecated = true];
+  SSDRandomCropOperation ssd_random_crop = 11 [deprecated = true];
+  RelativeCropTransform relative_crop_transform = 12 [deprecated = true];
+  AffineTransform affine_transform = 13 [deprecated = true];
+  ColorTransform color_transform = 14 [deprecated = true];
+  FilterBbox filter_bbox = 15 [deprecated = true];
+
+  // Parameters specific to conf/logos/ data providers.
+  LogoDataParams logo_data = 16;
+
+  // random aspect ratio transforms
+  AspectRatioTransform aspect_ratio_transform = 17 [deprecated = true];
+  // random horizontal and vertical flips
+  FlipTransform flip_transform = 18 [deprecated = true];
+  // add jpeg compression artifacts
+  JPEGRecompression jpeg_recompression = 19 [deprecated = true];
+
+  repeated MiniBatchItemStage mbitem_stage = 20;
+  int32 num_grpc_readers = 21 [deprecated = true];
+  gRPCReaderParams grpc_reader_params = 22 [deprecated = true];
+  // MiniBatchItemStages specifically for use in serving.
+  repeated MiniBatchItemStage serving_mbitem_stage = 23;
+
+  // Params for generating fake images with boudngin boxes.
+  FakeBoxes fake_boxes = 24;
+
+  FilterInvalidItems filter_invalid_items = 25;
+}
+
+message ProcessingParams {
+  // If "true" then the empty examples are kept from the results.
+  // When "false" (default) they are stripped out and not emitted by the
+  // data provider.
+  bool readers_keep_empty = 1 [deprecated = true];
+
+  int32 reader_threads = 2 [deprecated = true];
+  // Set to 0 to use the interpreter thread to load inline and > 0 to setup this
+  // many background threads per stage.
+  int32 worker_threads = 3;
+
+  // The number of cases to emit per minibatch
+  // This is divide by the number of devices. For example if you set
+  // this variable to 512 and have num_devices = 4, then each will
+  // work on minibatches of 128 in size.
+  int32 minibatch_size = 4;
+
+  // If True then loop forever.
+  bool continuous = 5 [deprecated = true];
+  // If True then randomize the order through the dataset.
+  bool shuffle = 6;
+
+  // The number of cases to treat as 1 epoch. The data provider will
+  // always be looping whether you set this or not, so it simply helps
+  // you and the trainer code keep track of steps.
+  //  For example you might set this to 1000000 to know that every epoch
+  // is 1 million images and compare to benchmarks that way.
+  int64 num_items_per_epoch = 7;
+
+  // List of field names that the data provider must fill for each example in
+  // each minibatch.
+  // Examples that do not contain the field will be given an empty default
+  // (e.g. empty labels list if there are no labels)
+  repeated string required_output_fields = 8;
+
+  // Size of queue for multithreaded stage (max number of minibatches or mbitems
+  // to cache in memory).
+  int32 queue_size = 9;
+}
+
+// Standard image operations (always applied to images and therefore
+// must always be filled in).
+message ImageCropTransform {
+  // The type of cropping to do for the imagenet images. The first part is the
+  // location and the # is
+  // how many per image. > 1 automatically averages those crops and is intended
+  // for predict
+  // only. '' Uses presets of 'center1' for predict and 'random1' for train.
+  string crop_type = 1;
+  // Allows for a second crop to use for evals.
+  // DEPRECATED: set this into the evaluation instead.
+  string test_crop_type = 2 [deprecated = true];
+  // The size of the preprocessed input image after cropping.
+  // This must be a list of length 3 such as [256, 256, 3].
+  repeated int32 crop_size = 3;
+  // The size to resize the min dim of each image before cropping.
+  // [256, 257] is standard. Now can take a range as[256,384] to randomly resize
+  // the min dimension to this size', default=None)
+  // This MUST be a len() == 2 list.
+  repeated int32 downsample_size = 4;
+  // Block size to round image size to during crop/resize transform.
+  int32 crop_size_pixel_stride = 5;
+
+  // Note(zeiler): not hooked up yet.
+  // The range of aspect ratio multipliers to apply to each image
+  // before resizing down to downsample_size as min dim. If a range is
+  // provided then this will be randomly sampled within the range. If a
+  // scalar float, then that is used.You can also use (fixed, 1.2) to fix
+  // each image's aspect ratio to 1.2 for example.
+  // The one that works: '[fixed,1.0]' or '[1.0,1.0]'.
+  // THERE CANNOT BE ANY SPACES or quotes inside.,
+  // repeated float aspect_ratio = 6;
+
+  bool skip_convert_rgb = 7;
+
+  // options to skip resize ("downsample") stage and crop stage to preserve
+  // original image size
+  bool skip_resize = 8;
+  bool skip_crop = 9;
+}
+
+message SavedOutputParams {
+  // The SavedOutputReader can load both the saved outputs and
+  // associated images using this flag.
+  // When "true" it will load the images. When "false" (default) it will
+  // load only the metadata and use the saved output vectors for
+  // training only.
+  bool saved_output_load_databatch = 1;
+}
+
+// If you want to train on multiple dataset you can pass in a list of
+// them here in order to specify their name, ratio for sample, saved
+// outputs to pull from, etc.
+message MultiDataset {
+  // If you're training on multiple datasets, these are the names of
+  // them.
+  string dataset_name = 1;
+  float sample_rate = 2;
+  int32 saved_output_eid = 3;
+  string saved_output_layer = 4;
+}
+
+message LabelSetter {
+  // A list of label nums to hard code into every example.
+  repeated int64 hardcoded_labels = 1;
+}
+
+// This has the dataset name so that you can repeat it.
+message LabelMapper {
+  // The dataset name. 'default' is a special case that will apply to
+  // all datasets.
+  string dataset_name = 1 [deprecated = true];
+
+  // The type of mapping. Valid values are: 'catid', 'constant', or 'noop'.
+  string type = 2;
+
+  // An aiid to remove for 'catid' mode.
+  string not_in_output_aiid = 3;
+
+  // A constant aiid to set always in 'constant' mode.
+  string aiid = 4;
+
+  string src_dataset = 5;
+  string dst_dataset = 6;
+
+  // a mapping of catids to set in 'catid_map' mode
+  map<string, string> catid_map = 7;
+}
+
+message LabelSmoother {
+  // 'constant', 'linear', 'log'
+  string mode = 1;
+  repeated float constant_range = 2;
+  repeated float linear_scale = 3;
+  repeated float log_scale = 4;
+  int64 num_labels = 5;
+}
+
+message LabelDropper {
+  // The label numbers you want to drop.
+  repeated int64 drop_labels = 1;
+}
+
+// ocr_crop_transform resizes the image to the specified height. Then it pads
+// the image on the right to the specified width. If the width of the image
+// (after resizing) is larger than the transform width, then the image is
+// truncated to the specified width
+message OCRCropTransform {
+  int64 height = 1;
+  int64 width = 2;
+}
+
+message MaxNumLabelDropper {
+  // The number of labels to keep, throwing away items that have more
+  // than this number of label (if 0, no limit).
+  int64 max_num_labels = 1;
+  // minimum number of labels required (default 0)
+  int64 min_num_labels = 2;
+}
+
+message LabelWeight {
+  // Path to the label freq file.
+  string catid_frequencies_file = 1;
+  float target_frequency = 2;
+  // If less examples than this, set weight to 0.
+  int64 min_count = 3;
+  // If true then sqrt the weight.
+  bool sqrt = 4;
+
+  // Override any of the weights with these by catid.
+  map<string, float> catid_const_weights = 5;
+
+  // If no weight for a label set it to this.
+  float default_weight = 6;
+
+  // Output dataset info.
+  string dataset_name = 7;
+  string split = 8;
+}
+
+// Copy labels from bboxes to image-level labels
+message LabelsFromBboxes {
+  bool set_background_label_zero = 1; // if true, assigns label 0 when there are no bboxes
+}
+
+// Copied from tf_models/object_detection/proto/preprocessor.proto
+message SSDRandomCropOperation {
+  // Cropped image must cover at least this fraction of one original bounding
+  // box.
+  float min_object_covered = 1;
+
+  // The aspect ratio of the cropped image must be within the range of
+  // [min_aspect_ratio, max_aspect_ratio].
+  float min_aspect_ratio = 2;
+  float max_aspect_ratio = 3;
+
+  // The area of the cropped image must be within the range of
+  // [min_area, max_area].
+  float min_area = 4;
+  float max_area = 5;
+
+  // Cropped box area ratio must be above this threhold to be kept.
+  float overlap_thresh = 6;
+
+  // Probability a crop operation is skipped.
+  float random_coef = 7;
+}
+
+// relative_crop_transform does this --- it will choose a box to crop out
+// of the image according to relative_aspect_range and
+// relative_scale_range.  The size of the box to crop is a random aspect
+// and scale, sampled from these ranges * the image size
+// then the image is resized to min-side 320
+// then if you have sortapad crop_type it will be reszied to fit in the sortapad
+// buckets
+// In reality, it only does one resize, but conceptually that is what it does.
+message RelativeCropTransform {
+  repeated float relative_scale_range = 1;
+  repeated float relative_aspect_range = 2;
+  bool horizontal_flip = 3;
+  float min_bbox_overlap = 4;
+  int32 attempts = 5;
+
+  enum FallbackMode {
+    ORIG_IMAGE = 0;
+    CROP = 1;
+    DISCARD = 2;
+  };
+  FallbackMode max_attempts_fallback = 6;
+  FallbackMode images_with_no_bboxes_fallback = 7;
+}
+
+message AspectRatioTransform {
+  repeated float relative_aspect_range = 1;
+}
+
+message AffineTransform {
+  // Default to 0.0 which means skip apply any transformation.
+  // Otherwise sample as rand() < skip_prob, so 1.0 will always
+  // apply.
+  float skip_prob = 1;
+  float rotate_min = 2;
+  float rotate_max = 3;
+  bool crop_original_size = 4;
+  bool use_transparent_corners = 5;
+}
+
+// Scale image to size range
+message ScaleTransform {
+  string scale_based_on = 1; // what to scale according to (eg min_side, max_side)
+  repeated float size_range = 2; // random size range
+}
+
+// Random distortions
+message DistortionTransform {
+  float skip_prob = 1;
+  int32 grid_width = 2;
+  int32 grid_height = 3;
+  float magnitude = 4;
+}
+
+// Randomly flips the input images either horizontally, vertically,
+// or both with probability flip_prob.
+message FlipTransform {
+  float flip_prob = 1;
+  bool horizontal = 2;
+  bool vertical = 3;
+}
+
+// This uses Pillow's ImageEnhance functionality to vary these
+// attributes of each image randomly.
+message ColorTransform {
+  // Range of values to sample for ImageEnhance.Brightness
+  // 0.0 gives a black image, 1.0 is original image.
+  // Must be 0.0 to 1.0 for examle [0.5, 1.0] range.
+  repeated float brightness_range = 1;
+  // Range of values to sample for ImageEnhance.Contrast
+  // 0.0 will be solid grey image, 1.0 is original image.
+  // Must be 0.0 to 1.0 for examle [0.5, 1.0] range.
+  repeated float contrast_range = 2;
+  // Range of values to sample for ImageEnhance.Color
+  // 0.0 will make black and white, 1.0 is original image.
+  // Must be 0.0 to 1.0 for examle [0.5, 1.0] range.
+  repeated float color_range = 3;
+  // Range of values to sample for ImageEnhance.Sharpness
+  // 0.0 gives a blurred image, 1.0 is original image, 2.0 is sharper
+  // image.
+  // Must be 0.0 to 1.0 for examle [0.5, 2.0] range.
+  repeated float sharpness_range = 4;
+  // Probability that a given image has inverted colors.
+  float invert_prob = 5;
+  // Probability a ColorTransform is skipped.
+  // Must be between 0.0 and 1.0.
+  // Default to 0.0, which means a ColorTransform is always applied.
+  float skip_prob = 6;
+}
+
+message LandmarkAlignTransform {
+  string transform_type = 1; // only implemented Similarity right now
+  int32 output_size = 2; // output a squared image, output_size is a single number representing the h (or w)
+}
+
+// When filtering the bounding boxes.
+message FilterBbox {
+  // Also filter out bounding boxes for backgrounds.
+  bool filter_bg_labels = 1;
+  // If true then clip to the visible_area.
+  bool clip = 2;
+  // Threshold only bboxes above this visible threshold.
+  // Must be between 0.0 and 1.0, where the denominator is the original
+  // area of the bbox
+  float visible_area_threshold = 3;
+  // keep mbitem if it contains valid bboxes or if all bboxes fall
+  // entirely outside the crop, with some sample prob
+  float no_bboxes_crop_sample = 4;
+  // Keep bboxes with absolute area (in pixels) above this threshold.
+  // Note we keep a bbox if it passes either the visible_area_threshold
+  // test OR the visible_absolute_area_threshold test
+  float visible_absolute_area_threshold = 5;
+}
+
+// Parameters for controlling the level of JPEG Recompression.
+message JPEGRecompression {
+  // The minimum JPEG quality, in [0, 100].
+  int32 qmin = 1;
+  // The maximum JPEG quality, in [0, 100].
+  int32 qmax = 2;
+}
+
+// These are params specific to conf/logos/logos_data.py data
+// providers.
+message LogoDataParams {
+  string output_logos_dataset = 1;
+  string pos_logos_dataset = 2;
+  string neg_logos_dataset = 3;
+
+  bool pos_logos_pregenerated = 4;
+  bool neg_logos_pregenerated = 5;
+
+  string background_dataset = 6;
+  float pos_logos_ratio = 7;
+  float neg_logos_ratio = 8;
+  int32 output_size = 9;
+  int32 logo_working_res = 10;
+  float alpha_crop_threshold = 11;
+  repeated int32 background_crop_size_range = 12;
+  float min_logo_size_of_image = 13;
+  float max_logo_size_of_image = 14;
+  int32 min_logo_size = 15;
+  float max_blur = 16;
+  float color_swap_prob = 17;
+  repeated string combination_modes = 18;
+  repeated float alpha_range = 19;
+  repeated int32 jpeg_recompress_range = 20;
+  // Sample rotation by this many degrees +/-
+  float rotate = 21;
+  // Sample rotation at 90 degrees at this rate.
+  float rot90 = 22;
+  bool horizontal_flips = 23;
+  bool grayscale = 24;
+  repeated float contrast = 25;
+  repeated float color_tint = 26;
+  bool use_neg_logo_label_index = 27;
+  int32 nologo_label_ind = 28;
+  float max_logo_out_of_image = 29;
+  bool remove_nologo_bboxes = 30;
+  int32 full_image_crop = 31;
+  float working_res_scale = 32;
+
+  float pos_min_overlap_of_window_threshold = 33;
+  float pos_max_overlap_of_window_threshold = 34;
+
+  float neg_overlap_of_logo_threshold = 35;
+  float pos_overlap_of_logo_threshold = 36;
+  float overlap_max_logo_aspect = 37;
+
+  int32 num_views = 38;
+  float white_bg_prob = 39;
+  repeated MultiDataset multi_dataset = 40;
+  string mode = 41;
+}
+
+// Parameters for basic whitespace tokenization of text.
+message WhitespaceTokenizer {
+  string pad_token = 1;
+  int32 max_length = 2;
+  bool no_strip_special = 3;
+  bool preserve_case = 4;
+}
+
+// Parameters for token indexer.
+message TokenIndexer {
+  string vocab_path = 1;
+  int32 num_oov_buckets = 2;
+}
+
+// Parameters for Audio MFCC preprocesser
+message AudioMFCCTransform {
+  int32 numcep = 1;
+  int32 numcontext = 2;
+}
+
+message FilterInvalidItems{
+  bool require_images = 1;
+  bool require_bboxes = 2;
+  bool require_labels = 3;
+}
+
+message MiniBatchItemStage {
+  oneof stage {
+    ImageCropTransform image_crop_transform = 1;
+    LabelSmoother label_smoother = 2;
+    LabelDropper label_dropper = 3;
+    MaxNumLabelDropper max_num_label_dropper = 4;
+    LabelWeight label_weight = 5;
+    SSDRandomCropOperation ssd_random_crop = 6;
+    RelativeCropTransform relative_crop_transform = 7;
+    AspectRatioTransform aspect_ratio_transform = 8;
+    AffineTransform affine_transform = 9;
+    FlipTransform flip_transform = 10;
+    JPEGRecompression jpeg_recompression = 11;
+    FilterBbox filter_bbox = 12;
+    ColorTransform color_transform = 13;
+    ScaleTransform scale_transform = 14;
+    LabelsFromBboxes labels_from_bboxes = 15;
+    DistortionTransform distortion_transform = 16;
+    WhitespaceTokenizer whitespace_tokenizer = 17;
+    TokenIndexer token_indexer = 18;
+    AudioMFCCTransform audio_mfcc_transform = 19;
+    OCRCropTransform ocr_crop_transform = 20;
+    FilterInvalidItems filter_invalid_items = 21;
+    LandmarkAlignTransform landmark_align_transform = 22;
+  }
+}
+
+message gRPCReaderParams {
+  string generator_class_name = 1;
+  oneof params {
+    DataProviderParams data_provider_params = 2;
+    bytes serialized_params = 3;
+  }
+  int32 batch_size = 4;
+}
+
+// This is used to generate fake images that have different shapes in
+// them and corresponding bounding boxes in order to test out
+// predictions over a variety of scales, aspect ratios, etc.
+message FakeBoxes {
+  // Generate this large of scales [0.0, 1.0] is entire image.
+  // To keep it simpler this is the max dimension size relative to the
+  // image dimension.
+  repeated float relative_scale_range = 1;
+  // Generate this range of aspect ratios.
+  repeated float relative_aspect_range = 2;
+  // Single scalar color to fill the box with (all 3 channels) in range 0...255
+  uint32 fill_color = 3;
+  // Single scalar color to make the background (all 3 channels) in range 0...255
+  uint32 background_color = 4;
+  // The image dimensions as [256, 256, 3] for example (rows, cols, colors)
+  repeated uint32 imsize = 5;
+  // The minimum number of pixels a generated block can be. This
+  // prevents a really small scale range from making a [0,0] block.
+  uint32 min_dim = 6;
+}

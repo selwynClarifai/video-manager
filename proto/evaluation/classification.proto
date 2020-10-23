@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option go_package = "evaluation";
+
+// Classification eval result proto
+message ClassificationEvalResult {
+  double top1_correct = 1;
+  double topk_correct = 2;
+
+  repeated ClassificationEvalSubset subsets = 3;
+}
+
+message ClassificationEvalSubset {
+  // if restricted to a class
+  string concept_name = 1;
+  string concept_id = 2;
+
+  // eval results
+  double top1_correct = 10;
+  double topk_correct = 11;
+  double auc = 12;
+  double precision_at_50 = 13;
+  double recall_at_50 = 14;
+  int64 num_gt_images = 17;
+};

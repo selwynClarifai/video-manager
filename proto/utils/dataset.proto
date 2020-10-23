@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "proto/utils/vocab.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Dataset {
+  string name = 1;
+  string data_dir = 2;
+  string meta_filename = 3;
+  string data_provider_name = 4;
+  Vocab vocab = 5;
+}

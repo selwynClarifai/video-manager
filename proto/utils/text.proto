@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Text {
+  // Text as a raw string.
+  string raw = 1;
+}

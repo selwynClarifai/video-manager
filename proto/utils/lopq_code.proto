@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "proto/clarifai/api/utils/extensions.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message LOPQCode {
+  // The LOPQ codes that describe a single tokenized embedding.
+  // This service handles tokenizing and converting those tokens to/from keys so that they can
+  // efficiently be indexed.
+  // Typically this will be two shorts (16-bit) concatenated into a 32 bit string.
+  bytes coarse_key = 1;
+  // Typically this will be the M fine codes as uint8's concatenated together.
+  bytes fine_key = 2;
+  // This is a projection down to low dimensions that we can index into the DB for efficient point
+  // sorting. We keep it repeated to allow for higher dimensional points in the future.
+  repeated float projection = 3 [(clarifai.api.utils.cl_show_if_empty) = true];
+}

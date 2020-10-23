@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "proto/utils/blur_result.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+
+service BlurDetectionService {
+  rpc BlurDetect (BlurDetectRequest) returns (BlurDetectResponse) {}
+}
+
+message BlurDetectRequest {
+  RequestMeta meta = 1;
+  // The image.url
+  DataBatch data = 2;
+}
+
+message BlurDetectResponse {
+  ResponseStatus status = 1;
+
+  repeated BlurResult result = 2 [deprecated = true];
+
+  DataBatch results = 3;
+}

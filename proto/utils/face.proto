@@ -1,0 +1,25 @@
+syntax = 'proto3';
+
+import "proto/utils/tag.proto";
+import "proto/utils/boundingbox.proto";
+import "proto/utils/embedding.proto";
+
+option go_package = "utils";
+option java_package = "utils";
+
+message Face {
+  repeated Tag identity = 1;
+  repeated Tag age = 2;
+  repeated Tag gender = 3;
+  repeated Tag ethnicity = 4;
+}
+
+// DO NOT USE THIS.
+// THIS IS ONLY USED FOR THE V1->V2 result conversion
+// AND WILL BE DEPRECATED SOON
+message FaceDetection {
+  BoundingBox box = 1;
+  Face face = 2;
+  Embedding embedding = 3;
+}
+

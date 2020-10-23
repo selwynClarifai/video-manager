@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+import "proto/utils/databatch_generator.proto";
+import "proto/utils/data_provider.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+
+service DataBatchGeneratorService {
+  rpc DataBatchGeneratorInit (DataBatchGeneratorInitRequest) returns (DataBatchGeneratorInitResponse) {}
+  rpc DataBatchGeneratorNext (DataBatchGeneratorNextRequest) returns (DataBatchGeneratorNextResponse) {}
+}
+
+message DataBatchGeneratorInitRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+
+  gRPCReaderParams grpc_reader_params = 2 [deprecated = true];
+  DataBatchGeneratorParams databatch_generator_params = 3;
+}
+
+message DataBatchGeneratorInitResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+}
+
+message DataBatchGeneratorNextRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+}
+
+message DataBatchGeneratorNextResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+
+  DataBatch data = 2;
+}

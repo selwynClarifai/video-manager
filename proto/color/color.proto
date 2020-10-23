@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+import "proto/utils/color_result.proto";
+import "proto/utils/databatch.proto";
+import "proto/utils/request_meta.proto";
+
+
+option go_package = "color";
+
+service ColorService {
+  rpc ColorPredict (ColorPredictRequest) returns (ColorPredictResponse) {}
+}
+
+message ColorPredictRequest {
+  // Data to help with logging requests and marking error.
+  RequestMeta meta = 1;
+  // The image.url
+  DataBatch data = 2;
+}
+
+message ColorPredictResponse {
+  // Status for the request.
+  ResponseStatus status = 1;
+  repeated ColorResult result = 2;
+}

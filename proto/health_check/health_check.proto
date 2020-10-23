@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "proto/utils/request_meta.proto";
+
+option go_package = "health_check";
+
+// Interface exported by the server.
+service Health {
+    // Query the server's health status
+    rpc Check (HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {
+    RequestMeta meta = 1;
+    string service = 2;
+}
+
+message HealthCheckResponse {
+  // The server's health status
+  ResponseStatus status = 1;
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus serving_status = 2;
+}

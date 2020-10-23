@@ -1,0 +1,1044 @@
+
+syntax = "proto3";
+
+import "proto/clarifai/admin_api/resources.proto";
+import "proto/clarifai/api/resources.proto";
+import "proto/clarifai/api/service.proto";
+import "proto/clarifai/api/status/status.proto";
+import "proto/clarifai/api/utils/extensions.proto";
+import "proto/clarifai/auth/scope/scope.proto";
+import "proto/clarifai/auth/util/extension.proto";
+
+import "google/protobuf/struct.proto";
+import "google/api/annotations.proto";
+
+
+package clarifai.admin_api;
+
+option go_package = "admin_api";
+option java_multiple_files = true;
+option java_package = "com.clarifai.admin_api";
+option objc_class_prefix = "CAIP";
+
+/*
+  Note: this is based on the google api format defined here. Please
+  read this before contributing to this file and other *.proto files
+  for the API.
+  https://cloud.google.com/service-management/reference/rpc/google.api#google.api.HttpRule
+ */
+
+service AdminAPI {
+  // Health check
+  rpc GetHealthz (GetHealthzRequest) returns (GetHealthzResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/healthz"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  // Auth
+  rpc PostAuth (PostAuthRequest) returns (SingleTokenResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/auth"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  ////////////////////////////////////////
+  // Users
+  ////////////////////////////////////////
+  // Get a specific user from a user id.
+  rpc GetUser (GetUserRequest) returns (SingleUserResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Search for a user (full field match)
+  rpc PostUsersSearch (PostUsersSearchRequest) returns (MultiUserResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/search"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Apps
+  ////////////////////////////////////////
+  rpc GetApp (clarifai.api.GetAppRequest) returns (clarifai.api.SingleAppResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  rpc PostApps (clarifai.api.PostAppsRequest) returns (clarifai.api.MultiAppResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_app_id.user_id}/apps"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Subscriptions
+  ////////////////////////////////////////
+  // Change a user's subcription
+  rpc PostSubscription (PostSubscriptionRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_id}/subscriptions"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  rpc GetSubscription (GetSubscriptionRequest) returns (GetSubscriptionResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/subscriptions"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Data Rights
+  ////////////////////////////////////////
+  // Get a user's data rights
+  rpc GetDataRights (GetDataRightsRequest) returns (DataRightsResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/data_rights"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  rpc PatchDataRights (PatchDataRightsRequest) returns (DataRightsResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_id}/data_rights"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Throttle
+  ////////////////////////////////////////
+  // Post a user's throttle by path
+  rpc PostThrottleByPath (PostThrottleByPathRequest) returns (SingleThrottleByPathResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_id}/throttles_by_path"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Patch a user's throttle by path
+  rpc PatchThrottleByPath (PatchThrottleByPathRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_id}/throttles_by_path/{v2_path}"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Delete a user's throttle by path
+  rpc DeleteThrottleByPath (DeleteThrottleByPathRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      delete: "/admin-api/users/{user_id}/throttles_by_path/{v2_path}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Get a user's throttle by path
+  rpc GetThrottlesByPath (GetThrottlesByPathRequest) returns (MultiThrottlesByPathResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/throttles_by_path"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Patch a user's throttle
+  rpc PatchThrottle (PatchThrottleRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_id}/throttle"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Delete a user's throttle
+  rpc DeleteThrottle (DeleteThrottleRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      delete: "/admin-api/users/{user_id}/throttle"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Get a user's throttle
+  rpc GetThrottle (GetThrottleRequest) returns (GetThrottleResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/throttle"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Billing
+  ////////////////////////////////////////
+  // Get the current billing cycle of the user
+  rpc GetBillingCycle (GetBillingCycleRequest) returns (SingleBillingCycleResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/billing/cycle"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get the billing method of the user
+  rpc GetBillType (GetBillTypeRequest) returns (SingleBillTypeResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/billing/type"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get all the billing cycles of a user
+  rpc ListBillingCycles (ListBillingCyclesRequest) returns (MultiBillingCycleResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/billing/cycles"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get charges of a user
+  rpc ListCharges (ListChargesRequest) returns (MultiChargeResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/billing/charges"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get credits of a user
+  rpc ListCredits (ListCreditsRequest) returns (MultiCreditResponse) {
+    option (google.api.http) = {
+        get: "/admin-api/users/{user_id}/billing/credits"
+      };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Apply credits to a user
+  rpc PostCredit (PostCreditRequest) returns (SingleCreditResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_id}/billing/credits"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Apply a one-time charge to a user
+  rpc PostCharge (PostChargeRequest) returns (SingleChargeResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_id}/billing/charges"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Change billing cycle date, and whether or not user is billed on stripe
+  rpc PatchBillingCycle (PatchBillingCycleRequest) returns (SingleBillingCycleResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_id}/billing/cycles"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Change the billing method for the user
+  rpc PatchBillType (PatchBillTypeRequest) returns (SingleBillTypeResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_id}/billing/type"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // usage as computed by limits.  for internal checking -- not necessarily accurate
+  // enough to share with end users and we don't expect perfect parity with billng
+  rpc GetUsage (GetUsageRequest) returns (GetUsageResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_id}/billing/usage"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Plans
+  ////////////////////////////////////////
+  rpc GetPlan (GetPlanRequest) returns (SinglePlanResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/plans/{plan_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get all plans
+  rpc ListPlans (ListPlansRequest) returns (MultiPlansResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/plans"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Create a plan
+  rpc PostPlan (PostPlanRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/plans"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Create a signup code for a plan
+  rpc PostSignupCode (PostSignupCodeRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/signup-codes"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Models
+  ////////////////////////////////////////
+  // Set model version to be publicly observed ( flag for custom trained model)
+  rpc PatchModelVersionVisibility (PatchModelVersionVisibilityRequest) returns (clarifai.admin_api.PatchModelVersionVisibilityResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/models/{model_id}/versions/{model_version_id}/visibility"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Set workflow to be publicly observed
+  rpc PatchWorkflowVisibility (PatchWorkflowVisibilityRequest) returns (clarifai.admin_api.PatchWorkflowVisibilityResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/workflows/{workflow_id}/visibility"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Set workflow to be publicly observed
+  rpc PostPrivateModelVersionToPublic (PostPrivateModelVersionToPublicRequest) returns (clarifai.admin_api.PostPrivateModelVersionToPublicResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_app_id.user_id}/applications/{user_app_id.app_id}/models/{model_id}/versions/{model_version_id}/public"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  ////////////////////////////////////////
+  // Keys
+  ////////////////////////////////////////
+  rpc PostKeys (PostKeysRequest) returns (MultiKeyResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/keys"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  //////////////////////////////////////////
+  // Workflows
+  /////////////////////////////////////////
+  // TO DO : Post base workflow
+  // Get base workflows templates
+  rpc ListTemplateWorkflows (ListTemplateWorkflowsRequest) returns (MultiWorkflowResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/template-workflows"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Post workflows templates
+  rpc PostTemplateWorkflow (PostTemplateWorkflowRequest) returns (SingleWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/template-workflows"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  // Patch base workflows templates
+  rpc PatchTemplateWorkflow (PatchTemplateWorkflowRequest) returns (SingleWorkflowResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/template-workflows"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+
+  rpc PostRefreshLimitsCache (PostRefreshLimitsCacheRequest) returns (PostRefreshLimitsCacheResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/refresh_limits_cache"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  rpc PostStripeEvent (PostStripeEventRequest) returns (PostStripeEventResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/stripe_events"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = NoAuth;
+  }
+
+  // License Admin
+  rpc PostLicenses (PostLicensesRequest) returns (clarifai.api.MultipleLicensesResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/licenses"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  rpc PatchLicenses (PatchLicensesRequest) returns (clarifai.api.MultipleLicensesResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/licenses"
+      body: "*"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  rpc GetLicense (GetLicenseRequest) returns (clarifai.api.SingleLicenseResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/licenses/{license_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  rpc ListLicenses (ListLicensesRequest) returns (clarifai.api.MultipleLicensesResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/licenses"
+      additional_bindings{
+        get: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/licenses"
+      }
+      additional_bindings{
+        get: "/admin-api/users/{user_app_id.user_id}/licenses"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+  rpc DeleteLicense (DeleteLicenseRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      delete: "/admin-api/users/{user_app_id.user_id}/apps/{user_app_id.app_id}/licenses/{license_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  //////////////////////////////////////////
+  // RuntimeConfigs
+  /////////////////////////////////////////
+  // Add a runtime configs
+  rpc PostRuntimeConfig (PostRuntimeConfigRequest) returns (SingleRuntimeConfigResponse) {
+    option (google.api.http) = {
+      post: "/admin-api/runtime-configs"
+      body: "*"
+      additional_bindings {
+        post: "/admin-api/runtime-configs"
+        body: "*"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Get a runtime config
+  rpc GetRuntimeConfig (GetRuntimeConfigRequest) returns (SingleRuntimeConfigResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/runtime-configs/{runtime_config_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // List runtime configs
+  rpc ListRuntimeConfigs (ListRuntimeConfigsRequest) returns (MultiRuntimeConfigResponse) {
+    option (google.api.http) = {
+      get: "/admin-api/runtime-configs"
+      additional_bindings {
+        get: "/admin-api/runtime-configs"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Patch one or more runtime configs
+  rpc PatchRuntimeConfig (PatchRuntimeConfigRequest) returns (SingleRuntimeConfigResponse) {
+    option (google.api.http) = {
+      patch: "/admin-api/runtime-configs"
+      body: "*"
+      additional_bindings {
+        patch: "/admin-api/runtime-configs"
+        body: "*"
+      }
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+
+  // Delete a runtime config
+  rpc DeleteRuntimeConfig (DeleteRuntimeConfigRequest) returns (clarifai.api.status.BaseResponse) {
+    option (google.api.http) = {
+      delete: "/admin-api/runtime-configs/{runtime_config_id}"
+    };
+    option (clarifai.auth.util.cl_auth_type) = AdminAuth;
+  }
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/auth.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostAuthRequest {
+  string google_id_token = 1;
+}
+
+message SingleTokenResponse {
+  // This is a description i wanted to say.
+  clarifai.api.status.Status status = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string session_token = 5;
+  string token_expires = 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/billing.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetBillingCycleRequest {
+  string user_id = 1;
+}
+
+message GetBillTypeRequest {
+  string user_id = 1;
+}
+
+message ListBillingCyclesRequest {
+  string user_id = 1;
+}
+
+message PatchBillingCycleRequest {
+  string user_id = 1; // this is the user-set unique id
+  Cycle cycle = 2;
+}
+
+message PatchBillTypeRequest {
+  string user_id = 1;
+  string bill_type = 2;
+}
+
+message GetUsageRequest {
+  string user_id = 1;
+}
+
+message GetUsageResponse {
+  clarifai.api.status.Status status = 1;
+  // FIXME: 64-bit needed but that is strings.
+  map<string, double> limits = 2;
+  // FIXME: 64-bit needed but that is strings.
+  map<string, double> usage = 3;
+  clarifai.api.BillingCycle billing_cycle = 4;
+}
+
+message SingleBillingCycleResponse {
+  clarifai.api.status.Status status = 1;
+  Cycle cycle = 2;
+}
+
+message SingleBillTypeResponse {
+  clarifai.api.status.Status status = 1;
+  string bill_type = 2;
+}
+
+message MultiBillingCycleResponse {
+  clarifai.api.status.Status status = 1;
+  repeated Cycle cycles = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/charge.proto
+////////////////////////////////////////////////////////////////////////////////
+message ListChargesRequest {
+  string user_id = 1;
+}
+
+message PostChargeRequest {
+  string user_id = 1; // this is the user-set unique id
+  OnetimeCharge charge = 2;
+}
+
+message SingleChargeResponse {
+  clarifai.api.status.Status status = 1;
+  OnetimeCharge charge = 2;
+}
+
+message MultiChargeResponse {
+  clarifai.api.status.Status status = 1;
+  repeated OnetimeCharge charges = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/credit.proto
+////////////////////////////////////////////////////////////////////////////////
+message ListCreditsRequest {
+  string user_id = 1;
+}
+
+message PostCreditRequest {
+  string user_id = 1; // this is the user-set unique id
+  Credit credit = 2;
+}
+
+message SingleCreditResponse {
+  clarifai.api.status.Status status = 1;
+  Credit credit = 2;
+}
+
+message MultiCreditResponse {
+  clarifai.api.status.Status status = 1;
+  repeated Credit credits = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/datarights.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetDataRightsRequest {
+  string user_id = 1;
+}
+
+message PatchDataRightsRequest {
+  string user_id = 1;
+  bool clarifai_owns_data_rights = 2;
+}
+
+message DataRightsResponse {
+  clarifai.api.status.Status status = 1;
+  bool clarifai_owns_data_rights = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/healthz.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetHealthzRequest {
+}
+
+message GetHealthzResponse {
+  clarifai.api.status.Status status = 1;
+  string time = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/key.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostKeysRequest {
+  repeated clarifai.api.Key keys = 1;
+}
+
+message MultiKeyResponse {
+  clarifai.api.status.Status status = 1;
+  repeated clarifai.api.Key keys = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/license.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostLicensesRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  repeated clarifai.api.License licenses = 2;
+}
+
+message PatchLicensesRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  repeated clarifai.api.License licenses = 2;
+
+  // The action to perform on the patched objects
+  // Only actions 'overwrite' and 'merge' are supported
+  string action = 3;
+}
+
+message GetLicenseRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string license_id = 2;
+}
+
+message ListLicensesRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string license_id = 2;
+}
+
+message DeleteLicenseRequest {
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string license_id = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/limit.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostRefreshLimitsCacheRequest {
+  // This is an internal user id.
+  string user_id = 1;
+}
+
+message PostRefreshLimitsCacheResponse {
+  clarifai.api.status.Status status = 1;
+  // FIXME: 64-bit needed but that is strings.
+  map<string, double> limits = 2;
+  clarifai.api.BillingCycle billing_cycle = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/model.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostPrivateModelVersionToPublicRequest {
+  // If model version not specified,
+  // will take the most recent trained model version
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string model_id = 2;
+  string model_version_id = 3;
+}
+
+message PostPrivateModelVersionToPublicResponse {
+  clarifai.api.status.Status status = 1;
+  clarifai.api.Model source_model = 2;
+  clarifai.api.Model destination_model = 3;
+}
+
+message PatchModelVersionVisibilityRequest {
+  // for both private and public models
+  // for both v2 (custom trained) and v1 (spire) models
+  // limited to models owned by main app
+  // patches visibility for specified model version
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string model_id = 2;
+  string model_version_id = 3;
+  bool is_public = 4;
+}
+
+message PatchModelVersionVisibilityResponse {
+  clarifai.api.status.Status status = 1;
+  clarifai.api.Model model = 2;
+  bool is_public = 3;
+}
+
+message PatchWorkflowVisibilityRequest {
+  // for both public and private workflows
+  // applies to base workflows as well
+  // limited to workflows owned by main app
+  clarifai.api.UserAppIDSet user_app_id = 1;
+  string workflow_id = 2;
+  bool is_public = 3;
+}
+
+message PatchWorkflowVisibilityResponse {
+  clarifai.api.status.Status status = 1;
+  clarifai.api.Workflow workflow = 2;
+  bool is_public = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/op_type.proto
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/plan.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetPlanRequest {
+  string plan_id = 1;
+}
+
+message SinglePlanResponse {
+  clarifai.api.status.Status status = 1;
+  Plan plan = 2;
+}
+
+message ListPlansRequest {
+  clarifai.api.Pagination pagination = 1;
+}
+
+message MultiPlansResponse {
+  clarifai.api.status.Status status = 1;
+  repeated Plan plans = 2;
+}
+
+message PostPlanRequest {
+  Plan plan = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/runtime_config.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostRuntimeConfigRequest {
+  RuntimeConfig config = 2;
+}
+
+message GetRuntimeConfigRequest {
+  string runtime_config_id = 1;
+}
+
+message ListRuntimeConfigsRequest {
+  repeated string runtime_config_ids = 1;
+
+  // ID of a plan to list the runtime configs for (optional)
+  string plan_id = 2;
+
+  // ID of a user to list the runtime configs for (optional)
+  string user_id = 3;
+
+  uint32 page = 4;
+  uint32 per_page = 5;
+}
+
+message PatchRuntimeConfigRequest {
+  RuntimeConfig config = 1;
+
+  // The action to perform on the patched object
+  // For now only action 'overwrite' is supported
+  string action = 2;
+}
+
+message DeleteRuntimeConfigRequest {
+  string runtime_config_id = 2;
+}
+
+message SingleRuntimeConfigResponse {
+  clarifai.api.status.Status status = 1;
+  RuntimeConfig config = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+message MultiRuntimeConfigResponse {
+  clarifai.api.status.Status status = 1;
+  repeated RuntimeConfig configs = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/signup_code.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostSignupCodeRequest {
+  SignupCode signup_code = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/stripe.proto
+////////////////////////////////////////////////////////////////////////////////
+message PostStripeEventRequest {
+  string id = 1;
+  string object = 2;
+  string api_version = 3;
+  uint32 created = 4;
+
+  // To handle arbitrary json metadata you can use a struct field:
+  // https://github.com/google/protobuf/blob/master/src/google/protobuf/struct.proto
+  google.protobuf.Struct data = 5;
+  bool livemode = 6;
+  uint32 pending_webhooks = 7;
+  string request = 8;
+  string type = 9;
+}
+
+message PostStripeEventResponse {
+  clarifai.api.status.Status status = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/subscription.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetSubscriptionRequest {
+  string user_id = 1;
+}
+
+message GetSubscriptionResponse {
+  clarifai.api.status.Status status = 1;
+  string current_plan_name = 2;
+  repeated ScheduledPlans scheduled_plans = 3;
+  string plan_id = 4;
+}
+
+message PostSubscriptionRequest {
+  string user_id = 1; // this is the user-set unique id
+  string plan_name = 2;
+  Schedule schedule = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/throttle.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetThrottleRequest {
+  string user_id = 1;
+}
+
+message GetThrottleResponse {
+  clarifai.api.status.Status status = 1;
+  int32 throttle = 2;
+}
+
+message PatchThrottleRequest {
+  string user_id = 1;
+  int32 throttle = 2;
+}
+
+message DeleteThrottleRequest {
+  string user_id = 1;
+}
+
+message GetThrottlesByPathRequest {
+  string user_id = 1;
+}
+
+message MultiThrottlesByPathResponse {
+  clarifai.api.status.Status status = 1;
+  repeated ThrottleByPath throttles_by_path = 2;
+}
+
+message SingleThrottleByPathResponse {
+  clarifai.api.status.Status status = 1;
+  ThrottleByPath throttle_by_path = 2;
+}
+
+message PostThrottleByPathRequest {
+  string user_id = 1;
+  string v2_path = 2;
+  int32 throttle = 3;
+}
+
+message PatchThrottleByPathRequest {
+  string user_id = 1;
+  string v2_path = 2;
+  int32 throttle = 3;
+}
+
+message DeleteThrottleByPathRequest {
+  string user_id = 1;
+  string v2_path = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/user.proto
+////////////////////////////////////////////////////////////////////////////////
+message GetUserRequest {
+  string user_id = 1; // this is the user-set unique id
+}
+
+message PostUsersSearchRequest {
+  User user = 1;
+  clarifai.api.Pagination pagination = 2;
+}
+
+message SingleUserResponse {
+  // This is a description i wanted to say.
+  clarifai.api.status.Status status = 1;
+  User user = 2;
+}
+
+message MultiUserResponse {
+  // This is a description i wanted to say.
+  clarifai.api.status.Status status = 1;
+  repeated User users = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Requests / Responses from /proto/clarifai/admin_api/workflow.proto
+////////////////////////////////////////////////////////////////////////////////
+message ListTemplateWorkflowsRequest {
+  uint32 page = 1;
+  uint32 per_page = 2;
+}
+
+message PostTemplateWorkflowRequest {
+  // There is no app id input; already defined as 'main_pk'
+  repeated clarifai.api.Workflow workflows = 1;
+}
+
+message PatchTemplateWorkflowRequest {
+  // There is no app id input; for template workflows it is already defined to be 'main'
+  repeated clarifai.api.Workflow workflows = 1;
+
+  // The action to perform on the patched objects
+  // For now only actions 'merge' and 'overwrite' are supported
+  string action = 2;
+
+}
+
+message SingleWorkflowResponse {
+  // Returns a single workflow identical to api implementation
+  clarifai.api.status.Status status = 1;
+  clarifai.api.Workflow workflow = 2;
+}
+
+message MultiWorkflowResponse {
+  // Returns multiple workflow user unique ids
+  clarifai.api.status.Status status = 1;
+  repeated clarifai.api.Workflow workflows = 2 [(clarifai.api.utils.cl_show_if_empty) = true];
+}
+
+////////////////////////////////////////////////////////////////////////////////

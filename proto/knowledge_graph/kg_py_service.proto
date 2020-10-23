@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+import "proto/clarifai/api/resources.proto";
+import "proto/utils/request_meta.proto";
+import "proto/utils/data_example.proto";
+
+package clarifai.api;
+
+option go_package = "api";
+option objc_class_prefix = "CAIP";
+
+message ConceptMap {
+  Concept customer_concept = 1;
+  repeated Concept golden_concept = 2;
+}
+
+message ConceptEmbeddingDump {
+  // s3 location of all concept embeddings, the file should have one embedding per concept
+  string location = 1;
+  // for small amount of concept embeddings, pass them through data examples
+  repeated DataExample example = 2;
+}
+
+message CustomerDataDump {
+  // Each data example should at least have embedding filled in, as well as 'tag' if applicable
+  // s3 location from DataDump response
+  string locaiton = 1;
+  // for small amount of data dump, pass them through data examples
+  repeated DataExample example = 2;
+}
+
+message PostKnowledgeGraphMatchRequest {
+  RequestMeta meta = 1;
+  // Search for children nodes in KG for each concept match
+  bool children = 2;
+  // Search for sibling nodes in KG for each concept match
+  bool siblings = 3;
+  // by default, search max_depth=1, return immediate children per matching node
+  int32 max_depth = 4;
+  // by default, search max_width=2, return at most two siblings per matching node
+  int32 max_width = 5;
+  CustomerDataDump customer_data = 6;
+  // Concept embedding dumps from our sharebale data pool
+  repeated ConceptEmbeddingDump shareable_concept_embeddings = 7;
+}
+
+message PostKnowledgeGraphMatchResponse {
+  ResponseStatus status = 1;
+  // concept mapping from one user concept to multiple concepts in our golden vocab trees
+  // not including siblings or children nodes.
+  repeated ConceptMap concept_map = 2;
+  // if user wants concept relations (children,siblings), call ListConceptRelationsRequest in proto/api/concept_graph.proto
+}
