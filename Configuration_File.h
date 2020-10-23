@@ -34,7 +34,7 @@ class Configuration_File {
     int jpeg_quality;
     std::string output_dir;
     bool aip_proto;
-    int server_port;  // GRPC server port
+    std::string grpc_channel;  // GRPC server channel
     bool imageSizeWritten;
     bool save_I_frames;
     bool save_jpeg;
