@@ -10,8 +10,8 @@ clean:
 make_video: clean
 	docker run -w /files --rm -it  -v `pwd`:/files video-manager \
 	  g++ -g -std=c++11 -pthread -L/opt/ffmpeg/lib -L/usr/lib/x86_64-linux-gnu \
-	  -I/opt/ffmpeg/include/ -I/usr/local/grpc/include -I/usr/local/grpc/third_party/protobuf/src \
-	  -I/usr/lib/include -I/usr/include  \
+	  -I. -I/opt/ffmpeg/include/ -I/usr/local/grpc/include \
+	  -I/usr/local/grpc/third_party/protobuf/src -I/usr/lib/include -I/usr/include \
 	  /files/cJSON.c /files/base64.c /files/AIP_Client.cpp /files/Api.cpp /files/Utils.cpp \
 	  /files/Configuration_File.cpp /files/VIdeo_Capture.cpp /files/video_manager.cpp \
 	  -lavcodec -lavformat -lavfilter -lavdevice -lswresample -lswscale -lavutil -ljpeg -lturbojpeg -lcurl \
@@ -20,7 +20,7 @@ make_video: clean
 make_video_no_predict: clean
 	docker run -w /files --rm -it  -v `pwd`:/files video-manager \
 	  g++ -std=c++11 -pthread -L/opt/ffmpeg/lib -L/usr/lib/x86_64-linux-gnu \
-	  -I/opt/ffmpeg/include/ -I/usr/local/grpc/include -I/usr/local/grpc/third_party/protobuf/src \
+	  -I. -I/opt/ffmpeg/include/ -I/usr/local/grpc/include -I/usr/local/grpc/third_party/protobuf/src \
 	  -I/usr/lib/include -I/usr/include  \
 	  /files/cJSON.c /files/base64.c /files/AIP_Client.cpp /files/Api.cpp /files/Utils.cpp \
 	  /files/Configuration_File.cpp /files/VIdeo_Capture.cpp /files/video_manager_no_predict.cpp \
