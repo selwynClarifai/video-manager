@@ -10,7 +10,7 @@ WORKDIR     /tmp/workdir
 
 RUN     apt-get -yqq update && \
         apt-get install -yq --no-install-recommends ca-certificates expat libgomp1 gcc \
-                libjpeg-dev libturbojpeg libcurl4-openssl-dev git gnutls-bin && \
+                libjpeg-dev libturbojpeg libcurl4-openssl-dev libavcodec-dev git gnutls-bin && \
         apt-get autoremove -y && \
         apt-get clean -y
 
