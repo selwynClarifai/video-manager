@@ -49,6 +49,9 @@ Video_Capture::Video_Capture(Configuration_File &c, Video_Capture::CaptureType c
   api.output_dir = c.output_dir;
   api.upload = c.upload;
 
+  aip_client.set_api(api);
+  aip_client.set_channel(c.grpc_channel);
+
   pOutFormatContext = NULL;
   pInFormatContext = NULL;
   pPacket = NULL;

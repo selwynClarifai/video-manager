@@ -12,8 +12,18 @@ using aip::processor::v2::Frame;
 using aip::processor::v2::RequestHeader;
 using aip::processor::v2::InferenceRequest;
 
-AIP_Client::AIP_Client(std::shared_ptr<ChannelInterface> channel)
-    : _stub(ProcessingService::NewStub(channel)) {}
+AIP_Client::AIP_Client()
+{}
+
+// set GRPC channel (i.e. localhost:30031)
+void AIP_Client::set_channel(std::shared_ptr<ChannelInterface> channel) {
+  _stub = ProcessingService::NewStub(channel);
+}
+
+// set reference to static API instance
+void AIP_Client::set_api(Api &api) {
+  _api = api;
+}
 
 // Assembles the client's payload, sends it and presents the response back
 // from the server.
@@ -67,9 +77,9 @@ void AIP_Client::write_inferenceResponse(const InferenceResponse &inferenceRespo
         string sepString = ", ";    // separator string for CSV file
         stringstream ssRegion;
         // Write Alarm and detections header
-        api.width = width;
-        api.height = height;
-        responseText.append(api.make_alarm_header(imageFileName));
+        _api.width = width;
+        _api.height = height;
+        responseText.append(_api.make_alarm_header(imageFileName));
         responseText.append(make_detections_header());
         Inferences inferences = inferenceResponse.inferences();
         for (int i = 0; i < inferences.inference_size(); i++) {
